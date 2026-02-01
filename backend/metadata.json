@@ -1,0 +1,8 @@
+{
+  "name": "G-FitLife - Enterprise Health & Wellness Hub",
+  "description": "A high-performance e-commerce platform for health, supplements, and fitness, featuring an integrated AI Health Coach and affiliate ecosystem.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
