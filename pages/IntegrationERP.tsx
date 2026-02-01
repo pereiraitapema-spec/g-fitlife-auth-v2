@@ -8,17 +8,21 @@ const IntegrationERP: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
-    setConfigs(storeService.getAPIConfigs().filter(c => c.type === 'erp'));
+    // Adicionado await para carregar e filtrar configurações de ERP
+    const load = async () => {
+      setConfigs((await storeService.getAPIConfigs()).filter(c => c.type === 'erp'));
+    };
+    load();
   }, []);
 
-  const handleSync = (provider: string) => {
+  const handleSync = async (provider: string) => {
+    // Adicionado await para garantir a sincronização e atualização do estado
     setIsSyncing(true);
-    setTimeout(() => {
-       storeService.syncERP(provider);
-       setConfigs([...storeService.getAPIConfigs().filter(c => c.type === 'erp')]);
-       setIsSyncing(false);
-       alert(`Sincronização de pedidos e estoque com ${provider} concluída!`);
-    }, 2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await storeService.syncERP(provider);
+    setConfigs((await storeService.getAPIConfigs()).filter(c => c.type === 'erp'));
+    setIsSyncing(false);
+    alert(`Sincronização de pedidos e estoque com ${provider} concluída!`);
   };
 
   return (

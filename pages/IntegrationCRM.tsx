@@ -8,17 +8,21 @@ const IntegrationCRM: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
-    setConfigs(storeService.getAPIConfigs().filter(c => c.type === 'crm'));
+    // Adicionado await para carregar e filtrar configurações de CRM
+    const load = async () => {
+      setConfigs((await storeService.getAPIConfigs()).filter(c => c.type === 'crm'));
+    };
+    load();
   }, []);
 
-  const handleSync = (provider: string) => {
+  const handleSync = async (provider: string) => {
+    // Adicionado await para garantir a sincronização e atualização de estado
     setIsSyncing(true);
-    setTimeout(() => {
-       storeService.syncCRM(provider);
-       setConfigs([...storeService.getAPIConfigs().filter(c => c.type === 'crm')]);
-       setIsSyncing(false);
-       alert(`Sincronização com ${provider} concluída com sucesso!`);
-    }, 2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await storeService.syncCRM(provider);
+    setConfigs((await storeService.getAPIConfigs()).filter(c => c.type === 'crm'));
+    setIsSyncing(false);
+    alert(`Sincronização com ${provider} concluída com sucesso!`);
   };
 
   return (

@@ -10,11 +10,16 @@ const IntegrationAPIs: React.FC = () => {
   const [formData, setFormData] = useState<Partial<ExternalAPIConfig>>({ provider: '', apiKey: '', type: 'crm', status: 'connected' });
 
   useEffect(() => {
-    setConfigs(storeService.getAPIConfigs());
-    setLogs(storeService.getSyncLogs());
+    // Adicionado await para carregar configurações de API e logs de sincronização
+    const load = async () => {
+      setConfigs(await storeService.getAPIConfigs());
+      setLogs(await storeService.getSyncLogs());
+    };
+    load();
   }, []);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
+    // Adicionado await para garantir a persistência e recarga correta dos dados
     e.preventDefault();
     const newCfg: ExternalAPIConfig = {
       id: 'API-' + Date.now(),
@@ -24,9 +29,9 @@ const IntegrationAPIs: React.FC = () => {
       status: 'connected',
       lastSync: new Date().toISOString()
     };
-    storeService.saveAPIConfig(newCfg);
-    setConfigs(storeService.getAPIConfigs());
-    setLogs(storeService.getSyncLogs());
+    await storeService.saveAPIConfig(newCfg);
+    setConfigs(await storeService.getAPIConfigs());
+    setLogs(await storeService.getSyncLogs());
     setIsModalOpen(false);
     setFormData({ provider: '', apiKey: '', type: 'crm' });
   };

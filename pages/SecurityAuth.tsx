@@ -14,7 +14,11 @@ const SecurityAuth: React.FC<SecurityAuthProps> = ({ currentUser }) => {
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    setSessions(storeService.getSessions());
+    // Adicionado await para carregar as sessões de usuários
+    const load = async () => {
+      setSessions(await storeService.getSessions());
+    };
+    load();
   }, []);
 
   const handleUpdateCredentials = (e: React.FormEvent) => {

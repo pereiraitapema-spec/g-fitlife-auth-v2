@@ -7,7 +7,11 @@ const AILogs: React.FC = () => {
   const [logs, setLogs] = useState<AILogEntry[]>([]);
 
   useEffect(() => {
-    setLogs(storeService.getAILogs());
+    // Adicionado await para carregar logs de auditoria de IA
+    const load = async () => {
+      setLogs(await storeService.getAILogs());
+    };
+    load();
   }, []);
 
   return (

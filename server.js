@@ -1,5 +1,6 @@
 
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -8,39 +9,41 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware de Segurança e Logs
+// 1. Middlewares de Segurança e Monitoramento
 app.use(helmet({
-  contentSecurityPolicy: false // Permitir carregamento de recursos externos do Studio
+  contentSecurityPolicy: false, // Necessário para permitir recursos externos do Studio/Gemini
+  crossOriginEmbedderPolicy: false
 }));
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// Rota de Health Check (Obrigatório para Railway/Cloud)
-app.get('/health', (req, res) => {
+// 2. Rotas de API (Sempre antes dos arquivos estáticos)
+app.get('/api/health', (req, res) => {
   res.status(200).json({ 
     status: 'ok', 
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'production'
+    system: 'G-FitLife Enterprise',
+    timestamp: new Date().toISOString() 
   });
 });
 
-// Mock de rotas de autenticação (Serão consumidas pelo Supabase Client no frontend)
-app.post('/api/auth/register', (req, res) => {
-  res.status(200).json({ message: 'Redirect to Supabase Auth Handler' });
+// 3. Servir Arquivos Estáticos do Frontend (React/Vite build)
+// O Vite gera por padrão na pasta 'dist' na raiz do projeto
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// 4. Roteamento Catch-all para Single Page Application (React Router)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.post('/api/auth/login', (req, res) => {
-  res.status(200).json({ message: 'Session management via JWT Supabase' });
-});
-
-// Inicialização
+// 5. Inicialização do Servidor
 app.listen(PORT, () => {
   console.log(`
-  ===========================================
-  🚀 G-FITLIFE BACKEND ONLINE
+  =================================================
+  🚀 G-FITLIFE SERVER ONLINE
   📡 Porta: ${PORT}
-  🔗 Status: http://localhost:${PORT}/health
-  ===========================================
+  🌍 Ambiente: ${process.env.NODE_ENV || 'development'}
+  📂 Servindo Frontend de: ${path.join(__dirname, 'dist')}
+  =================================================
   `);
 });

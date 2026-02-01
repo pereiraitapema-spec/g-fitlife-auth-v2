@@ -8,16 +8,20 @@ const InfraBackup: React.FC = () => {
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    setBackups(storeService.getBackups());
+    // Adicionado await para carregar os backups
+    const load = async () => {
+      setBackups(await storeService.getBackups());
+    };
+    load();
   }, []);
 
-  const handleCreateBackup = () => {
+  const handleCreateBackup = async () => {
+    // Adicionado await e async para garantir a persistência correta
     setIsCreating(true);
-    setTimeout(() => {
-      storeService.createBackup('Snapshot_Global_' + new Date().toLocaleDateString().replace(/\//g, '_'));
-      setBackups(storeService.getBackups());
-      setIsCreating(false);
-    }, 2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await storeService.createBackup('Snapshot_Global_' + new Date().toLocaleDateString().replace(/\//g, '_'));
+    setBackups(await storeService.getBackups());
+    setIsCreating(false);
   };
 
   return (

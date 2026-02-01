@@ -7,7 +7,11 @@ const FinanceTransactions: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   useEffect(() => {
-    setTransactions(storeService.getTransactions().reverse());
+    // Adicionado await para carregar transações e aplicar reverse()
+    const load = async () => {
+      setTransactions((await storeService.getTransactions()).reverse());
+    };
+    load();
   }, []);
 
   return (

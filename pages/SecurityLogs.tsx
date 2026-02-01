@@ -7,7 +7,11 @@ const SecurityLogs: React.FC = () => {
   const [events, setEvents] = useState<SecurityEvent[]>([]);
 
   useEffect(() => {
-    setEvents(storeService.getSecurityEvents().reverse());
+    // Adicionado await para carregar eventos de segurança e aplicar reverse()
+    const load = async () => {
+      setEvents((await storeService.getSecurityEvents()).reverse());
+    };
+    load();
   }, []);
 
   return (

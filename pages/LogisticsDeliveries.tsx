@@ -7,7 +7,11 @@ const LogisticsDeliveries: React.FC = () => {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
 
   useEffect(() => {
-    setDeliveries(storeService.getDeliveries().reverse());
+    // Adicionado await para carregar entregas e aplicar reverse()
+    const load = async () => {
+      setDeliveries((await storeService.getDeliveries()).reverse());
+    };
+    load();
   }, []);
 
   return (

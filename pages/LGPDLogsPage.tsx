@@ -7,7 +7,11 @@ const LGPDLogsPage: React.FC = () => {
   const [logs, setLogs] = useState<LGPDLog[]>([]);
 
   useEffect(() => {
-    setLogs(storeService.getLGPDLogs().reverse());
+    // Adicionado await para carregar logs da LGPD e aplicar reverse()
+    const load = async () => {
+      setLogs((await storeService.getLGPDLogs()).reverse());
+    };
+    load();
   }, []);
 
   return (

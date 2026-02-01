@@ -7,7 +7,11 @@ const LGPDConsentPage: React.FC = () => {
   const [consents, setConsents] = useState<LGPDConsent[]>([]);
 
   useEffect(() => {
-    setConsents(storeService.getConsents().reverse());
+    // Adicionado await para carregar consentimentos e aplicar reverse()
+    const load = async () => {
+      setConsents((await storeService.getConsents()).reverse());
+    };
+    load();
   }, []);
 
   return (

@@ -9,19 +9,23 @@ const IntegrationWhatsApp: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
-    setMessages(storeService.getWAMessages());
+    // Adicionado await para carregar mensagens do WhatsApp
+    const load = async () => {
+      setMessages(await storeService.getWAMessages());
+    };
+    load();
   }, []);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
+    // Adicionado await para garantir o envio e recarga das mensagens
     e.preventDefault();
     setIsSending(true);
-    setTimeout(() => {
-       storeService.sendWAMessage(formData.email, formData.content, 'manual');
-       setMessages(storeService.getWAMessages());
-       setFormData({ email: '', content: '' });
-       setIsSending(false);
-       alert('Mensagem enviada para a fila de processamento do WhatsApp!');
-    }, 1500);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    await storeService.sendWAMessage(formData.email, formData.content, 'manual');
+    setMessages(await storeService.getWAMessages());
+    setFormData({ email: '', content: '' });
+    setIsSending(false);
+    alert('Mensagem enviada para a fila de processamento do WhatsApp!');
   };
 
   return (

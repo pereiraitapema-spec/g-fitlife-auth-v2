@@ -7,7 +7,11 @@ const SEOPerformance: React.FC = () => {
   const [metrics, setMetrics] = useState<PerformanceMetric[]>([]);
 
   useEffect(() => {
-    setMetrics(storeService.getPerformanceMetrics());
+    // Adicionado await para carregar métricas de performance
+    const load = async () => {
+      setMetrics(await storeService.getPerformanceMetrics());
+    };
+    load();
   }, []);
 
   const getScoreColor = (val: number, type: 'lcp' | 'fid' | 'cls') => {

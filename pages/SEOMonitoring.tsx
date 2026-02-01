@@ -7,7 +7,11 @@ const SEOMonitoring: React.FC = () => {
   const [logs, setLogs] = useState<SystemLog[]>([]);
 
   useEffect(() => {
-    setLogs(storeService.getSystemLogs().reverse());
+    // Adicionado await para carregar logs do sistema e aplicar reverse()
+    const load = async () => {
+      setLogs((await storeService.getSystemLogs()).reverse());
+    };
+    load();
   }, []);
 
   return (
@@ -18,7 +22,7 @@ const SEOMonitoring: React.FC = () => {
           <p className="text-slate-500 font-medium">Logs em tempo real de navegação, erros e eventos de segurança.</p>
         </div>
         <div className="flex gap-4">
-           <button onClick={() => { setLogs(storeService.getSystemLogs().reverse()); }} className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:border-emerald-500 transition-all">ATUALIZAR LOGS</button>
+           <button onClick={async () => { setLogs((await storeService.getSystemLogs()).reverse()); }} className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:border-emerald-500 transition-all">ATUALIZAR LOGS</button>
         </div>
       </div>
 

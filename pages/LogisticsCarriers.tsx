@@ -7,7 +7,11 @@ const LogisticsCarriers: React.FC = () => {
   const [carriers, setCarriers] = useState<Carrier[]>([]);
 
   useEffect(() => {
-    setCarriers(storeService.getCarriers());
+    // Adicionado await para carregar transportadoras
+    const load = async () => {
+      setCarriers(await storeService.getCarriers());
+    };
+    load();
   }, []);
 
   return (

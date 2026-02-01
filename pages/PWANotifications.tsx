@@ -9,19 +9,23 @@ const PWANotifications: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
-    setLogs(storeService.getPWANotifications());
+    // Adicionado await para carregar notificações do PWA
+    const load = async () => {
+      setLogs(await storeService.getPWANotifications());
+    };
+    load();
   }, []);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
+    // Adicionado await para garantir o envio e a recarga das notificações
     e.preventDefault();
     setIsSending(true);
-    setTimeout(() => {
-       storeService.sendPWANotification(formData.title, formData.body);
-       setLogs(storeService.getPWANotifications());
-       setFormData({ title: '', body: '' });
-       setIsSending(false);
-       alert('Notificação enviada para todos os Apps instalados!');
-    }, 2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await storeService.sendPWANotification(formData.title, formData.body);
+    setLogs(await storeService.getPWANotifications());
+    setFormData({ title: '', body: '' });
+    setIsSending(false);
+    alert('Notificação enviada para todos os Apps instalados!');
   };
 
   return (

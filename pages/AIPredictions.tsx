@@ -7,7 +7,11 @@ const AIPredictions: React.FC = () => {
   const [predictions, setPredictions] = useState<AIPrediction[]>([]);
 
   useEffect(() => {
-    setPredictions(storeService.getAIPredictions());
+    // Adicionado await para carregar as predições de IA
+    const load = async () => {
+      setPredictions(await storeService.getAIPredictions());
+    };
+    load();
   }, []);
 
   return (

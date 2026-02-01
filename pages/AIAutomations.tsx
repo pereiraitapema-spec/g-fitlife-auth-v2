@@ -9,10 +9,15 @@ const AIAutomations: React.FC = () => {
   const [formData, setFormData] = useState<Partial<AIAutomationRule>>({ name: '', trigger: '', action: '', status: 'active' });
 
   useEffect(() => {
-    setRules(storeService.getAIAutomations());
+    // Adicionado await para carregar regras de automação
+    const load = async () => {
+      setRules(await storeService.getAIAutomations());
+    };
+    load();
   }, []);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
+    // Adicionado await para persistir a regra e recarregar a lista
     e.preventDefault();
     const newRule: AIAutomationRule = {
       id: 'rule-' + Date.now(),
@@ -22,8 +27,8 @@ const AIAutomations: React.FC = () => {
       status: 'active',
       executionsCount: 0
     };
-    storeService.saveAIAutomation(newRule);
-    setRules(storeService.getAIAutomations());
+    await storeService.saveAIAutomation(newRule);
+    setRules(await storeService.getAIAutomations());
     setIsModalOpen(false);
   };
 

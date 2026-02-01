@@ -9,14 +9,19 @@ const MarketingRemarketing: React.FC = () => {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
 
   useEffect(() => {
-    setLeads(storeService.getLeads());
-    setLogs(storeService.getRemarketingLogs());
-    setTemplates(storeService.getTemplates());
+    // Adicionado await para resolver as promises do storeService
+    const load = async () => {
+      setLeads(await storeService.getLeads());
+      setLogs(await storeService.getRemarketingLogs());
+      setTemplates(await storeService.getTemplates());
+    };
+    load();
   }, []);
 
-  const triggerManualRecuperation = (lead: Lead) => {
-    storeService.triggerRemarketing(lead);
-    setLogs(storeService.getRemarketingLogs());
+  const triggerManualRecuperation = async (lead: Lead) => {
+    // Adicionado await para garantir a execução e atualização correta do estado
+    await storeService.triggerRemarketing(lead);
+    setLogs(await storeService.getRemarketingLogs());
   };
 
   return (

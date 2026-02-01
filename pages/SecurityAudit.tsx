@@ -7,7 +7,11 @@ const SecurityAudit: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
 
   useEffect(() => {
-    setLogs(storeService.getAuditLogs().reverse());
+    // Adicionado await para carregar logs de auditoria e aplicar reverse()
+    const load = async () => {
+      setLogs((await storeService.getAuditLogs()).reverse());
+    };
+    load();
   }, []);
 
   return (

@@ -8,12 +8,17 @@ const MarketingChatIA: React.FC = () => {
   const [selectedSession, setSelectedSession] = useState<AIChatSession | null>(null);
 
   useEffect(() => {
-    setSessions(storeService.getChatSessions());
+    // Adicionado await para carregar as sessões de chat
+    const load = async () => {
+      setSessions(await storeService.getChatSessions());
+    };
+    load();
   }, []);
 
-  const handleEscalate = (id: string) => {
-    storeService.updateChatStatus(id, 'escalated');
-    setSessions(storeService.getChatSessions());
+  const handleEscalate = async (id: string) => {
+    // Adicionado await para atualizar o status e recarregar dados
+    await storeService.updateChatStatus(id, 'escalated');
+    setSessions(await storeService.getChatSessions());
     if (selectedSession?.id === id) setSelectedSession({...selectedSession, status: 'escalated'});
   };
 

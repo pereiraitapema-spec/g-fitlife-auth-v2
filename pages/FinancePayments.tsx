@@ -7,7 +7,11 @@ const FinancePayments: React.FC = () => {
   const [gateways, setGateways] = useState<PaymentGateway[]>([]);
 
   useEffect(() => {
-    setGateways(storeService.getGateways());
+    // Adicionado await para carregar gateways de pagamento
+    const load = async () => {
+      setGateways(await storeService.getGateways());
+    };
+    load();
   }, []);
 
   const toggleGateway = (id: string) => {
