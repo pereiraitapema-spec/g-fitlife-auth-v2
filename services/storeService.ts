@@ -127,6 +127,20 @@ export const storeService = {
     return result;
   },
 
+  async deleteAdminUser(userId: string) {
+    const response = await fetch('/api/admin/delete-user', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    });
+    
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Falha ao excluir admin');
+    
+    window.dispatchEvent(new Event('usersChanged'));
+    return result;
+  },
+
   async saveUser(u: AppUser): Promise<void> {
     await dbStore.put('users', u);
     const { error } = await supabase.from('profiles').upsert({

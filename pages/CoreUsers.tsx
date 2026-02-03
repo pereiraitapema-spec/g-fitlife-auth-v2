@@ -25,8 +25,12 @@ const CoreUsers: React.FC = () => {
   const isMaster = session?.userRole === UserRole.ADMIN_MASTER;
 
   const loadData = async () => {
-    const data = await storeService.getUsers();
-    setUsers([...data]);
+    try {
+      const data = await storeService.getUsers();
+      setUsers([...data]);
+    } catch (err) {
+      showFeedback("Falha ao sincronizar usuários", "error");
+    }
   };
 
   useEffect(() => {
@@ -47,7 +51,7 @@ const CoreUsers: React.FC = () => {
 
     try {
       await storeService.createAdminUser(adminFormData);
-      showFeedback("Novo administrador criado com sucesso!");
+      showFeedback("Novo administrador criado no sistema!");
       setIsAdminModalOpen(false);
       setAdminFormData({ name: '', email: '', password: '', role: UserRole.ADMIN_MASTER });
       await loadData();
@@ -79,11 +83,24 @@ const CoreUsers: React.FC = () => {
       await storeService.saveUser(userData);
       await loadData(); 
       setIsModalOpen(false);
-      showFeedback(isEdit ? "Alteração salva!" : "Usuário criado!");
+      showFeedback(isEdit ? "Alteração salva no Supabase!" : "Usuário criado!");
     } catch (error) {
       showFeedback("Erro ao salvar: " + error, "error");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const changeUserRole = async (userId: string, newRole: UserRole) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      try {
+        const updated = { ...user, role: newRole };
+        await storeService.saveUser(updated);
+        showFeedback("Cargo atualizado!");
+      } catch (err) {
+        showFeedback("Erro ao trocar cargo", "error");
+      }
     }
   };
 
@@ -101,17 +118,17 @@ const CoreUsers: React.FC = () => {
     if (userToDelete) {
       const u = users.find(x => x.id === userToDelete);
       if (u?.email === 'admin@system.local') {
-         showFeedback("Impossível deletar o System Core Admin", "error");
+         showFeedback("Impossível deletar o Core Master", "error");
          setIsConfirmDeleteOpen(false);
          return;
       }
 
-      const success = await storeService.deleteUser(userToDelete);
-      if (success) {
+      try {
+        await storeService.deleteAdminUser(userToDelete);
+        showFeedback("Usuário removido totalmente!");
         await loadData();
-        showFeedback("Usuário removido!");
-      } else {
-        showFeedback("Falha ao remover do banco", "error");
+      } catch (err) {
+        showFeedback(err.message, "error");
       }
       setIsConfirmDeleteOpen(false);
       setUserToDelete(null);
@@ -136,11 +153,11 @@ const CoreUsers: React.FC = () => {
       {isConfirmDeleteOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md">
           <div className="bg-white rounded-[50px] shadow-2xl p-12 text-center max-w-sm w-full">
-            <h3 className="text-2xl font-black mb-10">Remover Acesso?</h3>
-            <p className="text-slate-500 mb-8 text-sm">Esta ação é irreversível no Supabase.</p>
+            <h3 className="text-2xl font-black mb-6">Remover Acesso?</h3>
+            <p className="text-slate-500 mb-10 text-sm leading-relaxed">Esta ação excluirá o usuário do Auth e do Database permanentemente.</p>
             <div className="flex gap-4">
               <button onClick={handleDelete} className="flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase">EXCLUIR</button>
-              <button onClick={() => setIsConfirmDeleteOpen(false)} className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-xs uppercase">CANCELAR</button>
+              <button onClick={() => setIsConfirmDeleteOpen(false)} className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-xs uppercase text-slate-400">CANCELAR</button>
             </div>
           </div>
         </div>
@@ -149,13 +166,13 @@ const CoreUsers: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-end gap-6 px-4">
         <div>
           <h2 className="text-4xl font-black text-slate-900 uppercase">Colaboradores</h2>
-          <p className="text-slate-500 text-lg">Persistência real no Supabase com auditoria Master.</p>
+          <p className="text-slate-500 text-lg">Ambiente seguro com Auditoria Master.</p>
         </div>
         <div className="flex gap-4">
            {isMaster && (
              <button 
                onClick={() => setIsAdminModalOpen(true)} 
-               className="px-10 py-5 bg-emerald-600 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl"
+               className="px-10 py-5 bg-emerald-600 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20"
              >
                👑 CRIAR NOVO ADMIN
              </button>
@@ -169,14 +186,13 @@ const CoreUsers: React.FC = () => {
         </div>
       </div>
 
-      {/* Tabela de Usuários */}
       <div className="bg-white rounded-[50px] border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Usuário</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Tipo</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Tipo / Cargo</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Ações</th>
               </tr>
@@ -196,7 +212,17 @@ const CoreUsers: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-8 py-6 text-center">
-                     <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${u.role === UserRole.ADMIN_MASTER ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>{getRoleLabel(u.role)}</span>
+                     {isMaster && u.email !== 'admin@system.local' ? (
+                        <select 
+                          value={u.role}
+                          onChange={(e) => changeUserRole(u.id, e.target.value as UserRole)}
+                          className="bg-slate-100 border-none rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                           {roles.map(r => <option key={r.id} value={r.id}>{r.label.toUpperCase()}</option>)}
+                        </select>
+                     ) : (
+                        <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${u.role === UserRole.ADMIN_MASTER ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>{getRoleLabel(u.role)}</span>
+                     )}
                   </td>
                   <td className="px-8 py-6 text-center">
                     <span className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${u.status === UserStatus.ACTIVE ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>{u.status === UserStatus.ACTIVE ? '● Ativo' : '● Suspenso'}</span>
@@ -221,49 +247,65 @@ const CoreUsers: React.FC = () => {
       {isAdminModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[50px] shadow-2xl p-12 animate-in zoom-in-95">
-             <h3 className="text-3xl font-black uppercase mb-8 text-emerald-600">Novo Administrador</h3>
+             <h3 className="text-3xl font-black uppercase mb-8 text-emerald-600 tracking-tight">Novo Administrador</h3>
              <form onSubmit={handleCreateAdmin} className="space-y-6">
-                <input required placeholder="Nome do Admin" value={adminFormData.name} onChange={e => setAdminFormData({...adminFormData, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
+                <input required placeholder="Nome Completo" value={adminFormData.name} onChange={e => setAdminFormData({...adminFormData, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
                 <input required type="email" placeholder="E-mail" value={adminFormData.email} onChange={e => setAdminFormData({...adminFormData, email: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
                 <input required type="password" placeholder="Senha Temporária" value={adminFormData.password} onChange={e => setAdminFormData({...adminFormData, password: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
-                <select value={adminFormData.role} onChange={e => setAdminFormData({...adminFormData, role: e.target.value as any})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none">
-                   <option value={UserRole.ADMIN_MASTER}>ADMIN MASTER (Total)</option>
-                   <option value={UserRole.ADMIN_OPERATIONAL}>OPERACIONAL</option>
-                   <option value={UserRole.FINANCE}>FINANCEIRO</option>
-                </select>
+                <div className="space-y-2">
+                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Nível de Acesso</label>
+                   <select value={adminFormData.role} onChange={e => setAdminFormData({...adminFormData, role: e.target.value as any})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-black uppercase text-xs outline-none">
+                      <option value={UserRole.ADMIN_MASTER}>ADMIN MASTER (Total)</option>
+                      <option value={UserRole.ADMIN_OPERATIONAL}>OPERACIONAL</option>
+                      <option value={UserRole.FINANCE}>FINANCEIRO</option>
+                   </select>
+                </div>
                 <div className="flex gap-4 pt-6">
-                   <button type="submit" disabled={isSubmitting} className="flex-1 py-6 bg-emerald-600 text-white rounded-[24px] font-black uppercase text-xs">CRIAR NO BANCO</button>
-                   <button type="button" onClick={() => setIsAdminModalOpen(false)} className="px-8 py-6 bg-slate-100 text-slate-500 rounded-[24px] font-bold uppercase text-xs">CANCELAR</button>
+                   <button type="submit" disabled={isSubmitting} className="flex-1 py-6 bg-emerald-600 text-white rounded-[24px] font-black uppercase text-xs shadow-xl shadow-emerald-600/20 active:scale-95 transition-all">CRIAR NO BANCO</button>
+                   <button type="button" onClick={() => setIsAdminModalOpen(false)} className="px-8 py-6 bg-slate-100 text-slate-400 rounded-[24px] font-bold uppercase text-xs">CANCELAR</button>
                 </div>
              </form>
           </div>
         </div>
       )}
 
-      {/* Modal Editar Usuário Comum */}
+      {/* Modal Editar Perfil Comum */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-[50px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95">
-            <div className="p-10 border-b border-slate-50"><h3 className="text-3xl font-black uppercase">Dados do Usuário</h3></div>
+            <div className="p-10 border-b border-slate-50"><h3 className="text-3xl font-black uppercase">Dados Cadastrais</h3></div>
             <div className="p-10 overflow-y-auto custom-scrollbar">
               <form onSubmit={handleSaveUser} className="space-y-8">
-                <FileUpload label="Avatar" currentUrl={formData.googleId || ''} onUploadComplete={url => setFormData({...formData, googleId: url})} circular />
+                <FileUpload label="Avatar do Usuário" currentUrl={formData.googleId || ''} onUploadComplete={url => setFormData({...formData, googleId: url})} circular />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <input required placeholder="Nome" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner" />
-                  <input required disabled={formData.email === 'admin@system.local'} placeholder="E-mail" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner" />
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Nome Exibição</label>
+                    <input required placeholder="Nome" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">E-mail Principal</label>
+                    <input required disabled={formData.email === 'admin@system.local'} placeholder="E-mail" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner" />
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as any})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner">
-                    {roles.map(r => <option key={r.id} value={r.id}>{r.label.toUpperCase()}</option>)}
-                  </select>
-                  <select value={formData.loginType} onChange={e => setFormData({...formData, loginType: e.target.value as any})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner">
-                    <option value="email">E-mail e Senha</option>
-                    <option value="google">Google SSO</option>
-                  </select>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Tipo de Acesso</label>
+                    <select value={formData.loginType} onChange={e => setFormData({...formData, loginType: e.target.value as any})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner">
+                      <option value="email">E-mail e Senha</option>
+                      <option value="google">Google SSO</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Status da Conta</label>
+                    <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner">
+                      <option value={UserStatus.ACTIVE}>ATIVO</option>
+                      <option value={UserStatus.INACTIVE}>SUSPENSO</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex gap-4 pt-10 sticky bottom-0 bg-white">
-                  <button type="submit" disabled={isSubmitting} className="flex-1 py-6 bg-slate-900 text-white rounded-[28px] font-black text-sm uppercase">{isSubmitting ? 'SINCRONIZANDO...' : 'SALVAR NO BANCO'}</button>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-10 py-6 bg-slate-100 text-slate-50 text-slate-400 rounded-[28px] font-black text-sm uppercase">CANCELAR</button>
+                  <button type="submit" disabled={isSubmitting} className="flex-1 py-6 bg-slate-900 text-white rounded-[28px] font-black text-sm uppercase shadow-xl active:scale-95 transition-all">{isSubmitting ? 'SINCRONIZANDO...' : 'SALVAR ALTERAÇÕES'}</button>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-10 py-6 bg-slate-100 text-slate-400 rounded-[28px] font-black text-sm uppercase">CANCELAR</button>
                 </div>
               </form>
             </div>
