@@ -102,22 +102,26 @@ export const storeService = {
 
         if (error) return { success: false, error: error.message };
 
-        const { data: profile } = await supabase
+        // BUSCA PERFIL REAL NO BANCO PARA PEGAR A ROLE ATUALIZADA
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', data.user.id)
           .single();
 
-        if (!profile) return { success: false, error: 'Perfil não encontrado no banco.' };
+        if (profileError || !profile) {
+           return { success: false, error: 'Perfil de acesso não encontrado no banco de dados.' };
+        }
 
         const session = this.createSession(profile);
         return { success: true, session, forcePasswordChange: profile.isDefaultPassword };
       } catch (err) {
-         // Fallback para admin master em caso de falha de conexão mas credenciais batendo
+         // Fallback para admin master offline em ambiente de desenvolvimento se falhar conexão
          if (email === 'admin@system.local' && pass === 'admin123') {
            const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email, role: UserRole.ADMIN_MASTER };
            return { success: true, session: this.createSession(fallbackAdmin) };
          }
+         return { success: false, error: 'Erro de conexão com o banco.' };
       }
     }
     
@@ -131,10 +135,12 @@ export const storeService = {
   },
 
   async loginWithGoogle() {
-    if (!supabase) return { success: false, error: 'OAuth indisponível.' };
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    if (!supabase) return { success: false, error: 'Serviço de autenticação offline.' };
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin }
+      options: { 
+        redirectTo: window.location.origin 
+      }
     });
     if (error) return { success: false, error: error.message };
     return { success: true };

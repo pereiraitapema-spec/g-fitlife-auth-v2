@@ -65,7 +65,7 @@ import InfraBackup from './pages/InfraBackup';
 import InfraMonitoring from './pages/InfraMonitoring';
 
 import { storeService } from './services/storeService';
-import { UserSession, Product, UserRole } from './types';
+import { UserSession, Product, UserRole, UserStatus } from './types';
 import { supabase } from './backend/supabaseClient';
 
 export type Route = 
@@ -108,7 +108,6 @@ const App: React.FC = () => {
         console.log('[BOOTSTRAP] Iniciando G-FitLife Hub...');
         await storeService.initializeSystem();
         
-        // Tentativa de carregar sessão, com fallback se o supabase estiver nulo
         let sbSession = null;
         if (supabase) {
           try {
@@ -121,18 +120,45 @@ const App: React.FC = () => {
         
         if (sbSession) {
           const profile = await storeService.getProfileAfterLogin(sbSession.user.id);
+          
           if (profile) {
+            // VALIDAÇÃO DE STATUS DO PERFIL (REGRA OBRIGATÓRIA)
+            if (profile.status !== UserStatus.ACTIVE) {
+               setAuthError("Sua conta está suspensa ou inativa. Contate o suporte.");
+               if (supabase) await supabase.auth.signOut();
+               setIsSystemReady(true);
+               return;
+            }
+
             const newSess = storeService.createSession(profile);
             setSession(newSess);
-            setViewMode('admin');
-            setCurrentRoute('dashboard');
+            
+            const canAccessAdmin = profile.role === UserRole.ADMIN_MASTER || profile.role === UserRole.ADMIN_OPERATIONAL;
+            
+            if (canAccessAdmin) {
+              setViewMode('admin');
+              setCurrentRoute('dashboard');
+            } else {
+              setViewMode('store');
+              setCurrentRoute('public-home');
+            }
+          } else {
+             // Caso usuário autenticado via OAuth mas não tenha perfil na 'profiles'
+             setAuthError("Acesso administrativo negado. Perfil não autorizado.");
+             if (supabase) await supabase.auth.signOut();
           }
         } else {
           const active = storeService.getActiveSession();
           if (active) {
             setSession(active);
-            setViewMode('admin');
-            setCurrentRoute('dashboard');
+            const canAccessAdmin = active.userRole === UserRole.ADMIN_MASTER || active.userRole === UserRole.ADMIN_OPERATIONAL;
+            if (canAccessAdmin) {
+              setViewMode('admin');
+              setCurrentRoute('dashboard');
+            } else {
+              setViewMode('store');
+              setCurrentRoute('public-home');
+            }
           } else {
             setViewMode('store');
             setCurrentRoute('public-home');
@@ -142,7 +168,6 @@ const App: React.FC = () => {
       } catch (err) {
         console.error('[BOOTSTRAP] Erro fatal:', err);
         setInitError("Falha na inicialização do sistema. Verifique os logs.");
-        // Garante que pelo menos a tela de erro apareça
         setIsSystemReady(true);
       }
     };
@@ -174,14 +199,40 @@ const App: React.FC = () => {
       const result = await storeService.login(loginEmail, loginPass);
       if (result.success && result.session) {
         setSession(result.session);
-        setViewMode('admin');
-        setCurrentRoute('dashboard');
-        showFeedback("Logado no Core System");
+        
+        const role = result.session.userRole;
+        const isAdmin = role === UserRole.ADMIN_MASTER || role === UserRole.ADMIN_OPERATIONAL;
+        
+        if (isAdmin) {
+          setViewMode('admin');
+          setCurrentRoute('dashboard');
+          showFeedback("Acesso Administrativo Liberado");
+        } else {
+          setViewMode('store');
+          setCurrentRoute('public-home');
+          showFeedback("Bem-vindo à G-FitLife!");
+        }
       } else {
         setAuthError(result.error || 'Acesso negado');
         showFeedback(result.error || "Erro de Auth", "error");
       }
     } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsLoggingIn(true);
+    setAuthError(null);
+    try {
+      const res = await storeService.loginWithGoogle();
+      if (!res.success) {
+        setAuthError(res.error || "Falha no Google Auth");
+        showFeedback(res.error || "Erro de Auth", "error");
+        setIsLoggingIn(false);
+      }
+      // O Supabase redirecionará para o Google, o retorno é tratado no useEffect bootstrap
+    } catch (e) {
       setIsLoggingIn(false);
     }
   };
@@ -202,8 +253,22 @@ const App: React.FC = () => {
 
   const renderAdminContent = () => {
     if (!session) return null;
+
+    const role = session.userRole;
+    const isAdmin = role === UserRole.ADMIN_MASTER || role === UserRole.ADMIN_OPERATIONAL;
+    
+    if (!isAdmin) {
+      return (
+        <div className="h-[60vh] flex flex-col items-center justify-center text-center p-10 space-y-6 animate-in zoom-in-95">
+          <div className="w-24 h-24 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-5xl">🛡️</div>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Acesso Restrito</h2>
+          <p className="text-slate-500 max-w-sm font-medium">Você não possui privilégios de administrador para visualizar este console.</p>
+          <button onClick={() => setViewMode('store')} className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-500 transition-all">Voltar para a Loja</button>
+        </div>
+      );
+    }
+
     switch (currentRoute) {
-      // Core & Catalog
       case 'dashboard': return <Dashboard />;
       case 'core-settings': return <CoreSettings />;
       case 'core-users': return <CoreUsers />;
@@ -213,52 +278,34 @@ const App: React.FC = () => {
       case 'departments': return <Departments />;
       case 'categories': return <CategoriesPage />;
       case 'coupons': return <CouponsPage />;
-      
-      // Marketing
       case 'mkt-banners': return <MarketingBanners />;
       case 'mkt-remkt': return <MarketingRemarketing />;
       case 'mkt-chat': return <MarketingChatIA />;
-      
-      // SEO
       case 'seo-onpage': return <SEOOnPage />;
       case 'seo-tech': return <SEOTechnical />;
       case 'seo-perf': return <SEOPerformance />;
       case 'seo-audit': return <SEOMonitoring />;
-      
-      // Finance
       case 'fin-gateways': return <FinancePayments />;
       case 'fin-trans': return <FinanceTransactions />;
       case 'fin-reports': return <FinanceReports />;
-      
-      // Logistics
       case 'log-carriers': return <LogisticsCarriers />;
       case 'log-rates': return <LogisticsRates />;
       case 'log-deliveries': return <LogisticsDeliveries />;
-      
-      // Marketplace
       case 'mkp-sellers': return <MarketplaceSellers />;
       case 'mkp-prods': return <MarketplaceProducts />;
       case 'mkp-orders': return <MarketplaceOrders />;
       case 'mkp-fin': return <MarketplaceFinance />;
-      
-      // IA
       case 'ai-recom': return <AIRecommendations />;
       case 'ai-predict': return <AIPredictions />;
       case 'ai-automations': return <AIAutomations />;
       case 'ai-logs': return <AILogs />;
-      
-      // PWA
       case 'pwa-settings': return <PWASettings />;
       case 'pwa-installs': return <PWAInstallation />;
       case 'pwa-push': return <PWANotifications />;
-      
-      // Integrations
       case 'int-apis': return <IntegrationAPIs />;
       case 'int-crm': return <IntegrationCRM />;
       case 'int-wa': return <IntegrationWhatsApp />;
       case 'int-erp': return <IntegrationERP />;
-      
-      // Security & Infra
       case 'sec-auth': return <SecurityAuth currentUser={session} />;
       case 'sec-perms': return <SecurityPermissions />;
       case 'sec-audit': return <SecurityAudit />;
@@ -267,11 +314,8 @@ const App: React.FC = () => {
       case 'infra-deploy': return <InfraDeploy currentUser={session} />;
       case 'infra-backup': return <InfraBackup />;
       case 'infra-monitoring': return <InfraMonitoring />;
-      
-      // Help
       case 'help-overview': return <HelpOverview />;
       case 'help-core-detail': return <HelpCoreDetail />;
-      
       default: return <Dashboard />;
     }
   };
@@ -318,14 +362,33 @@ const App: React.FC = () => {
         <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl relative z-10 animate-in zoom-in-95">
            <button onClick={() => setViewMode('store')} className="absolute top-8 right-8 text-slate-300 font-bold hover:text-slate-900 transition-all">✕</button>
            <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-white text-3xl font-black mx-auto mb-8 shadow-xl">G</div>
-           <h1 className="text-3xl font-black text-center text-slate-900 mb-10 tracking-tight">Enterprise Login</h1>
-           {authError && <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-bold text-center">{authError}</div>}
+           <h1 className="text-3xl font-black text-center text-slate-900 mb-10 tracking-tight leading-none uppercase">Console Enterprise</h1>
+           
+           {authError && <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-bold text-center border border-red-100 animate-bounce">{authError}</div>}
+           
            <form onSubmit={handleLogin} className="space-y-4">
-             <input disabled={isLoggingIn} type="text" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full bg-slate-50 rounded-3xl p-6 outline-none font-bold border-2 border-transparent focus:border-emerald-500 transition-all shadow-inner" placeholder="E-mail Administrativo" required />
+             <input disabled={isLoggingIn} type="text" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full bg-slate-50 rounded-3xl p-6 outline-none font-bold border-2 border-transparent focus:border-emerald-500 transition-all shadow-inner" placeholder="E-mail Corporativo" required />
              <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full bg-slate-50 rounded-3xl p-6 outline-none font-bold border-2 border-transparent focus:border-emerald-500 transition-all shadow-inner" placeholder="Senha" required />
-             <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[30px] font-black text-lg hover:bg-emerald-500 transition-all active:scale-95 shadow-xl">{isLoggingIn ? 'SINC...' : 'ACESSAR CONSOLE'}</button>
+             <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[30px] font-black text-lg hover:bg-emerald-500 transition-all active:scale-95 shadow-xl">{isLoggingIn ? 'AUTENTICANDO...' : 'ACESSAR AGORA'}</button>
            </form>
-           <p className="mt-8 text-center text-slate-400 text-xs font-medium">Acesso restrito a operadores autorizados G-FitLife.</p>
+
+           <div className="my-8 flex items-center gap-4">
+              <div className="flex-1 h-px bg-slate-100"></div>
+              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Ou acessar com</span>
+              <div className="flex-1 h-px bg-slate-100"></div>
+           </div>
+
+           <button 
+             type="button"
+             disabled={isLoggingIn}
+             onClick={handleGoogleLogin}
+             className="w-full py-5 bg-white border-2 border-slate-100 rounded-[30px] font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-50 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+           >
+              <img src="https://img.icons8.com/color/48/google-logo.png" className="w-6 h-6" alt="Google" />
+              Entrar com Google
+           </button>
+
+           <p className="mt-8 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest leading-relaxed">Acesso restrito a operadores <br/> autorizados G-FitLife Enterprise.</p>
         </div>
       </div>
     );
