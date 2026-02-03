@@ -99,12 +99,19 @@ const CoreUsers: React.FC = () => {
 
   const handleDelete = async () => {
     if (userToDelete) {
+      const u = users.find(x => x.id === userToDelete);
+      if (u?.email === 'admin@system.local') {
+         showFeedback("Impossível deletar o System Core Admin", "error");
+         setIsConfirmDeleteOpen(false);
+         return;
+      }
+
       const success = await storeService.deleteUser(userToDelete);
       if (success) {
         await loadData();
         showFeedback("Usuário removido!");
       } else {
-        showFeedback("Não é possível deletar o admin master", "error");
+        showFeedback("Falha ao remover do banco", "error");
       }
       setIsConfirmDeleteOpen(false);
       setUserToDelete(null);
@@ -130,6 +137,7 @@ const CoreUsers: React.FC = () => {
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md">
           <div className="bg-white rounded-[50px] shadow-2xl p-12 text-center max-w-sm w-full">
             <h3 className="text-2xl font-black mb-10">Remover Acesso?</h3>
+            <p className="text-slate-500 mb-8 text-sm">Esta ação é irreversível no Supabase.</p>
             <div className="flex gap-4">
               <button onClick={handleDelete} className="flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase">EXCLUIR</button>
               <button onClick={() => setIsConfirmDeleteOpen(false)} className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-xs uppercase">CANCELAR</button>
@@ -197,7 +205,7 @@ const CoreUsers: React.FC = () => {
                      <div className="flex justify-end gap-3">
                         <button onClick={() => { setFormData(u); setIsModalOpen(true); }} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-blue-500 font-black text-[10px] uppercase">Editar</button>
                         <button onClick={() => toggleStatus(u.id)} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-slate-400 font-black text-[10px] uppercase">Status</button>
-                        {u.email !== 'admin@system.local' && (
+                        {u.email !== 'admin@system.local' && (isMaster || u.role !== UserRole.ADMIN_MASTER) && (
                           <button onClick={() => { setUserToDelete(u.id); setIsConfirmDeleteOpen(true); }} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-red-400 font-black text-[10px] uppercase">Deletar</button>
                         )}
                      </div>
@@ -255,7 +263,7 @@ const CoreUsers: React.FC = () => {
                 </div>
                 <div className="flex gap-4 pt-10 sticky bottom-0 bg-white">
                   <button type="submit" disabled={isSubmitting} className="flex-1 py-6 bg-slate-900 text-white rounded-[28px] font-black text-sm uppercase">{isSubmitting ? 'SINCRONIZANDO...' : 'SALVAR NO BANCO'}</button>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-10 py-6 bg-slate-100 text-slate-50 rounded-[28px] font-black text-sm uppercase">CANCELAR</button>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-10 py-6 bg-slate-100 text-slate-50 text-slate-400 rounded-[28px] font-black text-sm uppercase">CANCELAR</button>
                 </div>
               </form>
             </div>

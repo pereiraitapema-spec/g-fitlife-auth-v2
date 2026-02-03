@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import HeaderSimple from './components/HeaderSimple';
@@ -15,7 +14,6 @@ import OrdersPage from './pages/OrdersPage';
 import PublicCatalog from './pages/PublicCatalog';
 import CheckoutPage from './pages/CheckoutPage';
 import PublicHome from './pages/PublicHome';
-// Import missing pages
 import PublicDepartments from './pages/PublicDepartments';
 import Departments from './pages/Departments';
 import CategoriesPage from './pages/CategoriesPage';
@@ -24,7 +22,8 @@ import PublicContact from './pages/PublicContact';
 import AICoach from './components/AICoach';
 import LGPDBanner from './components/LGPDBanner';
 import { storeService } from './services/storeService';
-import { UserSession, Product } from './types';
+import { UserSession, Product, UserRole } from './types';
+import { supabase } from './backend/supabaseClient';
 
 export type Route = 
   | 'dashboard' | 'core-settings' | 'core-users' | 'core-roles' 
@@ -53,31 +52,52 @@ const App: React.FC = () => {
   const [showForcePass, setShowForcePass] = useState(false);
   const [newPass, setNewPass] = useState('');
 
-  // BOOTSTRAP DE SISTEMA COM FONTE ÚNICA DE VERDADE
   useEffect(() => {
     const bootstrap = async () => {
       try {
         await storeService.initializeSystem();
-        const active = storeService.getActiveSession();
-        if (active) {
-          setSession(active);
-          setViewMode('admin');
-          setCurrentRoute('dashboard');
+        
+        // Verificação de sessão atual (Supabase + Local)
+        const { data: { session: sbSession } } = await supabase.auth.getSession();
+        
+        if (sbSession) {
+          const profile = await storeService.getProfileAfterLogin(sbSession.user.id);
+          if (profile) {
+            const newSess = storeService.createSession(profile);
+            setSession(newSess);
+            setViewMode('admin');
+            setCurrentRoute('dashboard');
+          }
         } else {
-          setViewMode('store');
-          setCurrentRoute('public-home');
+          const active = storeService.getActiveSession();
+          if (active) {
+            setSession(active);
+            setViewMode('admin');
+            setCurrentRoute('dashboard');
+          } else {
+            setViewMode('store');
+            setCurrentRoute('public-home');
+          }
         }
         setIsSystemReady(true);
       } catch (err) {
         console.error("Critical Bootstrap Failure", err);
-        setInitError("Falha ao inicializar o banco de dados local. Limpe o cache e tente novamente.");
+        setInitError("Falha ao inicializar o banco de dados. Limpe o cache e tente novamente.");
       }
     };
     bootstrap();
 
+    const handleSessionUpdate = () => {
+      setSession(storeService.getActiveSession());
+    };
+    window.addEventListener('sessionUpdated', handleSessionUpdate);
+
     const handleResize = () => setIsSidebarOpen(window.innerWidth > 1024);
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('sessionUpdated', handleSessionUpdate);
+    };
   }, []);
 
   const showFeedback = (msg: string, type: 'success' | 'error' | 'warning' = 'success') => {
@@ -113,44 +133,18 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPass || newPass.length < 6) {
-      showFeedback("A senha deve ter ao menos 6 caracteres.", "error");
-      return;
-    }
-    // Fix: Ensure updateAdminCredentials exists in storeService
-    const success = await storeService.updateAdminCredentials(session!.userId, session!.userEmail, newPass);
-    if (success) {
-      setShowForcePass(false);
-      setViewMode('admin');
-      setCurrentRoute('dashboard');
-      showFeedback("Senha atualizada com sucesso");
-    }
-  };
-
   const handleGoogleLogin = async () => {
     if (isLoggingIn) return;
     setIsLoggingIn(true);
     try {
-      let googleEmail = loginEmail.trim() || prompt("Simulador Google SSO: Digite o e-mail");
-      if (!googleEmail) {
-        setIsLoggingIn(false);
-        return;
+      const result = await storeService.loginWithGoogle();
+      if (!result.success) {
+         showFeedback(result.error || "Erro ao conectar com Google", "error");
+         setIsLoggingIn(false);
       }
-      
-      const result = await storeService.loginWithGoogle(googleEmail);
-      if (result.success && result.session) {
-        setSession(result.session);
-        setViewMode('admin');
-        setCurrentRoute('dashboard');
-        showFeedback("Acesso liberado via Google");
-      } else {
-        setAuthError(result.error);
-        showFeedback(result.error || "Email não encontrado", "error");
-      }
-    } finally {
+    } catch (err) {
       setIsLoggingIn(false);
+      showFeedback("Erro inesperado no OAuth", "error");
     }
   };
 
@@ -160,6 +154,11 @@ const App: React.FC = () => {
     setViewMode('store');
     setCurrentRoute('public-home');
     showFeedback("Sessão encerrada");
+  };
+
+  const switchUserRole = (newRole: UserRole) => {
+     storeService.updateSessionRole(newRole);
+     showFeedback(`Papel alterado para: ${newRole.replace('_', ' ').toUpperCase()}`, "warning");
   };
 
   const handleNavigate = (route: Route) => {
@@ -184,21 +183,6 @@ const App: React.FC = () => {
              <p className="text-slate-500 font-black uppercase tracking-[0.4em] text-[10px]">Validando Persistência...</p>
           </div>
         )}
-      </div>
-    );
-  }
-
-  if (showForcePass) {
-    return (
-      <div className="h-screen bg-slate-900 flex items-center justify-center p-4 relative font-sans">
-        <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl relative z-10">
-           <h1 className="text-3xl font-black text-center text-slate-900 mb-2">Nova Senha</h1>
-           <p className="text-slate-400 text-center font-medium mb-12 text-sm">Por segurança, altere sua senha de primeiro acesso.</p>
-           <form onSubmit={handleUpdatePassword} className="space-y-4">
-             <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} className="w-full bg-slate-50 rounded-3xl p-6 outline-none font-bold shadow-inner" placeholder="Nova Senha" required />
-             <button className="w-full py-6 bg-emerald-500 text-white rounded-[30px] font-black text-lg shadow-xl">SALVAR E ENTRAR</button>
-           </form>
-        </div>
       </div>
     );
   }
@@ -238,7 +222,6 @@ const App: React.FC = () => {
       case 'help-core-detail': return <HelpCoreDetail />;
       case 'products-catalog': return <ProductsCatalog />;
       case 'orders': return <OrdersPage />;
-      // Fix: Components now imported and accessible
       case 'categories': return <CategoriesPage />;
       case 'departments': return <Departments />;
       case 'coupons': return <CouponsPage />;
@@ -268,6 +251,22 @@ const App: React.FC = () => {
           }`}>
              <span className="font-black text-xs uppercase tracking-widest">{feedback.message}</span>
           </div>
+        </div>
+      )}
+
+      {/* Role Switcher Flutuante para Masters */}
+      {session?.userRole === UserRole.ADMIN_MASTER && viewMode === 'admin' && (
+        <div className="fixed bottom-6 left-6 z-[500] animate-in slide-in-from-left-10">
+           <div className="bg-slate-900 text-white p-4 rounded-[32px] shadow-2xl border border-white/10 flex items-center gap-4">
+              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 ml-2">Simular Role:</span>
+              <select 
+                onChange={(e) => switchUserRole(e.target.value as UserRole)}
+                className="bg-white/10 border-none rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none"
+              >
+                 <option value={UserRole.ADMIN_MASTER}>ADMIN MASTER</option>
+                 <option value={UserRole.CUSTOMER}>CLIENTE FINAL</option>
+              </select>
+           </div>
         </div>
       )}
 

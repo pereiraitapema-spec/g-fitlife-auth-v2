@@ -39,19 +39,25 @@ async function seedMasterUser() {
         user_metadata: { role: 'admin_master' }
       });
 
-      if (authError) throw authError;
+      if (authError && !authError.message.includes('already exists')) throw authError;
 
-      const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
-        id: authUser.user.id,
-        name: 'Super Admin G-FitLife',
-        email,
-        role: 'admin_master',
-        status: 'active',
-        created_at: new Date().toISOString()
-      });
+      // Mesmo se o Auth já existe, forçamos o perfil público
+      const { data: userByEmail } = await supabaseAdmin.auth.admin.listUsers();
+      const targetUser = userByEmail.users.find(u => u.email === email);
 
-      if (profileError) throw profileError;
-      console.log('[SEED] Master User configurado com sucesso.');
+      if (targetUser) {
+        const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
+          id: targetUser.id,
+          name: 'Super Admin G-FitLife',
+          email,
+          role: 'admin_master',
+          status: 'active',
+          created_at: new Date().toISOString()
+        });
+
+        if (profileError) throw profileError;
+        console.log('[SEED] Master User configurado com sucesso.');
+      }
     } else {
       console.log('[SEED] Master User já ativo no sistema.');
     }
@@ -65,7 +71,7 @@ if (process.env.NODE_ENV !== 'test') seedMasterUser();
 
 // 2. Middlewares
 app.use(helmet({
-  contentSecurityPolicy: false, // Desativado para facilitar carregamento de assets externos no ambiente Studio
+  contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
 }));
 app.use(cors());

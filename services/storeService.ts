@@ -92,24 +92,25 @@ export const storeService = {
     }
   },
 
-  async loginWithGoogle(email?: string) {
-    if (email) {
-      const users = await this.getUsers();
-      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (user) {
-        const session = this.createSession(user);
-        return { success: true, session };
-      }
-      return { success: false, error: 'Usuário não encontrado.' };
-    }
-
+  async loginWithGoogle() {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin }
+      options: {
+        redirectTo: window.location.origin,
+      }
     });
     
     if (error) return { success: false, error: error.message };
     return { success: true };
+  },
+
+  async getProfileAfterLogin(userId: string) {
+     const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+     return profile;
   },
 
   async createAdminUser(userData: any) {
@@ -179,6 +180,15 @@ export const storeService = {
     return JSON.parse(saved);
   },
 
+  updateSessionRole(role: UserRole) {
+    const session = this.getActiveSession();
+    if (session) {
+      session.userRole = role;
+      sessionStorage.setItem(KEY_SESSION, JSON.stringify(session));
+      window.dispatchEvent(new Event('sessionUpdated'));
+    }
+  },
+
   logout(): void {
     sessionStorage.removeItem(KEY_SESSION);
     supabase.auth.signOut();
@@ -190,6 +200,8 @@ export const storeService = {
   },
 
   async getUsers(): Promise<AppUser[]> {
+    const { data: remoteUsers } = await supabase.from('profiles').select('*');
+    if (remoteUsers) return remoteUsers as AppUser[];
     return await dbStore.getAll<AppUser>('users');
   },
 
@@ -242,19 +254,18 @@ export const storeService = {
   },
 
   async updateUserStatus(id: string, status: UserStatus): Promise<void> {
-    const users = await this.getUsers();
-    const user = users.find(u => u.id === id);
-    if (user) {
-      user.status = status;
-      await this.saveUser(user);
-    }
+    const { error } = await supabase.from('profiles').update({ status }).eq('id', id);
+    if (error) throw error;
+    window.dispatchEvent(new Event('usersChanged'));
   },
 
   async deleteUser(id: string): Promise<boolean> {
-    const users = await this.getUsers();
-    const user = users.find(u => u.id === id);
+    const { data: user } = await supabase.from('profiles').select('*').eq('id', id).single();
     if (user && user.email === 'admin@system.local') return false;
-    await dbStore.delete('users', id);
+
+    const { error } = await supabase.from('profiles').delete().eq('id', id);
+    if (error) return false;
+    
     window.dispatchEvent(new Event('usersChanged'));
     return true;
   },
