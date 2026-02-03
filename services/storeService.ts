@@ -63,7 +63,6 @@ export const storeService = {
   },
 
   async login(email: string, pass: string) {
-    // Fallback Master Local (Sempre funcional para emergências)
     if (email.trim().toLowerCase() === 'admin@system.local' && pass === 'admin123') {
       const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email: email.toLowerCase(), role: UserRole.ADMIN_MASTER, status: UserStatus.ACTIVE };
       const session = this.createSession(fallbackAdmin);
@@ -81,16 +80,15 @@ export const storeService = {
           const profile = await this.getProfileAfterLogin(data.user.id);
           if (profile) {
             if (profile.status !== UserStatus.ACTIVE) {
-              return { success: false, error: 'Conta suspensa. Contate o administrador.' };
+              return { success: false, error: 'Conta suspensa. Contate o suporte.' };
             }
             const session = this.createSession(profile);
-            // Staff: cargos que acessam o Admin Master
             const staffRoles = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING, UserRole.SELLER];
             const isStaff = staffRoles.includes(profile.role);
             return { success: true, session, profile, isStaff };
           }
         } else if (error) {
-           return { success: false, error: 'E-mail ou senha incorretos.' };
+           return { success: false, error: 'Credenciais inválidas ou acesso não autorizado.' };
         }
       } catch (err) {
         console.error("Erro auth remota:", err);
@@ -101,7 +99,7 @@ export const storeService = {
   },
 
   async loginWithGoogle() {
-    if (!supabase) return { success: false, error: 'Supabase Offline' };
+    if (!supabase) return { success: false, error: 'Serviço de autenticação indisponível.' };
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -110,7 +108,7 @@ export const storeService = {
       if (error) return { success: false, error: error.message };
       return { success: true };
     } catch (err) {
-      return { success: false, error: 'Erro ao conectar com Google' };
+      return { success: false, error: 'Erro ao conectar com Google Workspace' };
     }
   },
 
@@ -120,7 +118,7 @@ export const storeService = {
         name: data.name,
         email: data.email.toLowerCase(),
         role: UserRole.AFFILIATE,
-        status: UserStatus.INACTIVE, // Aguardando liberação
+        status: UserStatus.INACTIVE, 
         created_at: new Date().toISOString()
       };
       
@@ -132,10 +130,10 @@ export const storeService = {
         name: res.name,
         email: res.email,
         status: 'inactive',
-        commissionRate: 10,
+        commissionRate: 15,
         totalSales: 0,
         balance: 0,
-        refCode: '' // Será gerado na aprovação
+        refCode: '' 
       });
 
       return { success: true };
@@ -145,7 +143,7 @@ export const storeService = {
 
   async approveAffiliate(userId: string) {
     if (supabase) {
-      const refCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const refCode = 'REF-' + Math.random().toString(36).substring(2, 8).toUpperCase();
       await supabase.from('users_profile').update({ status: UserStatus.ACTIVE }).eq('id', userId);
       await supabase.from('affiliates').update({ 
         status: 'active',
@@ -164,7 +162,7 @@ export const storeService = {
       if (password) updates.password = password;
       const { error } = await supabase.auth.updateUser(updates);
       if (error) throw error;
-      await this.logAudit(userId, `Auto-atualização de credenciais de acesso.`);
+      await this.logAudit(userId, `Auto-atualização de segurança realizada pelo usuário.`);
       return true;
     } catch (err) {
       return false;
@@ -173,14 +171,26 @@ export const storeService = {
 
   async logAudit(userId: string, action: string) {
     if (supabase) {
-      const { data: users } = await supabase.from('users_profile').select('name').eq('id', userId).single();
+      const { data: profile } = await supabase.from('users_profile').select('name').eq('id', userId).single();
       await supabase.from('audit_logs').insert({
         userId,
-        userName: users?.name || 'Sistema',
+        userName: profile?.name || 'Sistema',
         action,
         timestamp: new Date().toISOString()
       });
     }
+  },
+
+  async uploadFile(file: File): Promise<string> {
+    if (!supabase) return URL.createObjectURL(file);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `public/${fileName}`;
+    // Fix: Alterado de 'media' para 'uploads' conforme solicitado
+    const { error } = await supabase.storage.from('uploads').upload(filePath, file);
+    if (error) throw error;
+    const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filePath);
+    return publicUrl;
   },
 
   async getProfileAfterLogin(userId: string) {
@@ -312,17 +322,6 @@ export const storeService = {
       { id: UserRole.AFFILIATE, label: 'Afiliado', permissions: [] },
       { id: UserRole.SELLER, label: 'Vendedor Marketplace', permissions: [] }
     ];
-  },
-
-  async uploadFile(file: File): Promise<string> {
-    if (!supabase) return URL.createObjectURL(file);
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
-    const filePath = `public/${fileName}`;
-    const { error } = await supabase.storage.from('media').upload(filePath, file);
-    if (error) throw error;
-    const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(filePath);
-    return publicUrl;
   },
 
   async updateUserStatus(id: string, status: UserStatus): Promise<void> {
