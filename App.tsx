@@ -101,7 +101,6 @@ const App: React.FC = () => {
 
   // Lógica de Pouso por Papel (Role Landing)
   const handleRoleLanding = (role: UserRole) => {
-    // Lista de cargos que têm acesso ao Sistema Master (Admin)
     const staffRoles = [
       UserRole.ADMIN_MASTER, 
       UserRole.ADMIN_OPERATIONAL, 
@@ -170,10 +169,16 @@ const App: React.FC = () => {
       if (res.success && res.session) {
         setSession(res.session);
         handleRoleLanding(res.session.userRole);
-        setFeedback({ message: `Bem-vindo de volta!`, type: 'success' });
+        setFeedback({ message: `Acesso autorizado!`, type: 'success' });
         setTimeout(() => setFeedback(null), 3000);
+      } else if (res.isUnregistered) {
+        // Redirecionamento automático se não cadastrado
+        setFeedback({ message: `E-mail não cadastrado como Staff. Entrando na loja...`, type: 'warning' });
+        setViewMode('store');
+        setCurrentRoute('public-home');
+        setTimeout(() => setFeedback(null), 4000);
       } else {
-        setAuthError(res.error || 'Acesso negado');
+        setAuthError(res.error || 'Falha na autenticação');
       }
     } finally {
       setIsLoggingIn(false);
@@ -216,15 +221,17 @@ const App: React.FC = () => {
             <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Console Master</h1>
             {authError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase border border-red-100">{authError}</div>}
             <form onSubmit={handleLogin} className="space-y-4 pt-4">
-               <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="E-mail" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
-               <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="Senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
-               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all shadow-xl active:scale-95">Entrar no Hub</button>
+               <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="E-mail Corporativo" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
+               <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="Senha de Acesso" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
+               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
+                 {isLoggingIn ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : 'Entrar no Hub'}
+               </button>
             </form>
             <button onClick={handleGoogleLogin} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95">
               <img src="https://img.icons8.com/color/48/google-logo.png" className="w-6 h-6" alt="" />
               Google Workspace
             </button>
-            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline">Voltar para a Vitrine</button>
+            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline">Voltar para a Vitrine (Comprar)</button>
           </div>
         </div>
       </div>
@@ -235,7 +242,9 @@ const App: React.FC = () => {
     <div className="flex h-screen bg-slate-50 overflow-hidden relative">
       {feedback && (
         <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-10">
-          <div className="px-12 py-5 bg-slate-900 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest">
+          <div className={`px-12 py-5 border rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest ${
+            feedback.type === 'warning' ? 'bg-amber-500 border-amber-400 text-white' : 'bg-slate-900 border-emerald-500 text-white'
+          }`}>
             {feedback.message}
           </div>
         </div>

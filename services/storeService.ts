@@ -63,7 +63,7 @@ export const storeService = {
   },
 
   async login(email: string, pass: string) {
-    // Fallback Master Local ( admin@system.local / admin123 )
+    // Fallback Master Local (admin@system.local)
     if (email.trim().toLowerCase() === 'admin@system.local' && pass === 'admin123') {
       const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email, role: UserRole.ADMIN_MASTER, status: UserStatus.ACTIVE };
       const session = this.createSession(fallbackAdmin);
@@ -78,23 +78,20 @@ export const storeService = {
         });
 
         if (!error && data.user) {
-          const { data: profile } = await supabase
-            .from('users_profile')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
+          const profile = await this.getProfileAfterLogin(data.user.id);
 
           if (profile) {
             if (profile.status !== UserStatus.ACTIVE) {
               return { success: false, error: 'Conta suspensa. Contate o administrador.' };
             }
-            
             const session = this.createSession(profile);
             return { success: true, session, profile };
-          } else {
-             return { success: false, error: 'Perfil não encontrado.' };
           }
         } else if (error) {
+           // Se o erro for de credenciais inválidas ou usuário não existe
+           if (error.message.includes('Invalid login credentials') || error.status === 400) {
+             return { success: false, isUnregistered: true, error: 'E-mail não cadastrado como Staff. Direcionando para a loja...' };
+           }
            return { success: false, error: error.message };
         }
       } catch (err) {
@@ -102,7 +99,7 @@ export const storeService = {
       }
     }
     
-    return { success: false, error: 'Credenciais incorretas ou falha na conexão.' };
+    return { success: false, error: 'Falha na conexão com o servidor de autenticação.' };
   },
 
   async loginWithGoogle() {

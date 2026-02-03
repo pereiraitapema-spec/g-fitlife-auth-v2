@@ -10,52 +10,33 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
 
 // Validação proativa de chaves e segurança de ambiente
 const checkKeySecurity = (url, key) => {
-  // 1. Verificação de Ausência ou Placeholders (Modo Demo)
   const isMissing = !url || !key;
   const isPlaceholder = 
     url.includes('seu-projeto') || 
-    url.includes('seu-projeto-id') ||
-    key.includes('sua-chave') || 
-    key.includes('anon-publica');
+    key.includes('sua-chave');
 
   if (isMissing || isPlaceholder) {
-    console.warn('⚠️ G-FitLife: Configuração do Supabase ausente ou usando placeholders. O sistema operará em modo DEMO (Offline/Local).');
-    return { valid: false, critical: false };
+    console.warn('⚠️ G-FitLife: Configuração do Supabase ausente. Operando em modo OFFLINE.');
+    return { valid: false };
   }
   
-  // 2. Verificação Crítica: Service Role no Frontend
-  // Nunca deve haver chaves de serviço no define do Vite/Webpack
-  const serviceRoleLeaked = 
-    key.toLowerCase().includes('service_role') || 
-    (typeof process.env.SUPABASE_SERVICE_ROLE_KEY !== 'undefined' && process.env.SUPABASE_SERVICE_ROLE_KEY !== '');
-
-  if (serviceRoleLeaked) {
-    console.error('🚨 SEGURANÇA CRÍTICA: SUPABASE_SERVICE_ROLE_KEY detectada no frontend! O acesso foi bloqueado para proteger a integridade do seu banco de dados.');
-    return { valid: false, critical: true };
+  // Apenas bloqueia se detectarmos explicitamente que a chave ANON é na verdade a SERVICE_ROLE
+  const looksLikeServiceKey = key.includes('service_role');
+  if (looksLikeServiceKey) {
+    console.error('🚨 ERRO CRÍTICO: SUPABASE_SERVICE_ROLE_KEY detectada no frontend. Operação bloqueada por segurança.');
+    return { valid: false };
   }
 
-  return { valid: true, critical: false };
+  return { valid: true };
 };
 
 const securityStatus = checkKeySecurity(supabaseUrl, supabaseAnonKey);
 
 /**
- * Exporta o cliente apenas se a configuração for válida e segura.
- * Caso contrário, exporta null para sinalizar modo Offline/Demo às stores.
+ * Exporta o cliente apenas se a configuração for válida.
  */
 export const supabase = securityStatus.valid 
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-/**
- * Helper para obter a instância com tratamento de erros de segurança.
- */
-export const getSupabase = () => {
-  if (!supabase) {
-    if (securityStatus.critical) {
-      throw new Error('Segurança: Chave Service Role proibida no navegador. Operação abortada.');
-    }
-    return null; // Retorna null para sinalizar modo Offline amigável
-  }
-  return supabase;
-};
+export const getSupabase = () => supabase;

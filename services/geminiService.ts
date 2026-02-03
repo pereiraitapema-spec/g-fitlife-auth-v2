@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 const SYSTEM_INSTRUCTION = `
 Você é o "G-FitLife Architect", um assistente de IA especialista em saúde, nutrição e performance esportiva.
@@ -14,7 +14,9 @@ Diretrizes:
 
 export const getAICoachResponse = async (userPrompt: string, history: {role: 'user' | 'model', parts: {text: string}[]}[]) => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Inicialização seguindo a regra: const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+    
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: [...history, { role: 'user', parts: [{ text: userPrompt }] }],
@@ -26,7 +28,7 @@ export const getAICoachResponse = async (userPrompt: string, history: {role: 'us
       },
     });
 
-    return response.text;
+    return response.text || "Estou processando sua solicitação...";
   } catch (error) {
     console.error("Gemini API Error:", error);
     return "Desculpe, tive um pequeno problema técnico. Como posso te ajudar com sua saúde hoje?";
