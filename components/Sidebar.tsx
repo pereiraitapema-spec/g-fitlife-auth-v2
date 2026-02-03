@@ -48,7 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentRoute, onNavigate, use
 
   return (
     <aside className="w-72 bg-slate-900 h-full flex flex-col text-slate-300 border-r border-slate-800 transition-all duration-300 z-50 shrink-0">
-      {/* Header Fixo */}
+      {/* Header Fixo da Marca */}
       <div className="p-8 flex items-center gap-4 border-b border-slate-800">
         <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 bg-slate-800 shrink-0">
           <img src={settings.logoUrl} className="w-full h-full object-cover" alt="Logo" />
@@ -59,7 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentRoute, onNavigate, use
         </div>
       </div>
 
-      {/* Navegação com Scroll */}
+      {/* Navegação com Scroll Contínuo */}
       <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto custom-scrollbar scroll-smooth">
         {onSwitchToStore && (
           <button 
