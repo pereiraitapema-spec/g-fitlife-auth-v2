@@ -20,6 +20,7 @@ import CategoriesPage from './pages/CategoriesPage';
 import CouponsPage from './pages/CouponsPage';
 import PublicContact from './pages/PublicContact';
 import PublicAffiliateRegister from './pages/PublicAffiliateRegister';
+import PublicFavorites from './pages/PublicFavorites';
 import AICoach from './components/AICoach';
 import LGPDBanner from './components/LGPDBanner';
 
@@ -77,7 +78,7 @@ export type Route =
   | 'dashboard' | 'core-settings' | 'core-users' | 'core-roles' 
   | 'help-overview' | 'help-core-detail' | 'affiliate-register'
   | 'products-catalog' | 'orders' | 'store-catalog' | 'checkout' | 'store-offers' | 'public-contact'
-  | 'public-home' | 'departments' | 'categories' | 'coupons'
+  | 'public-home' | 'departments' | 'categories' | 'coupons' | 'favorites'
   | 'mkt-banners' | 'mkt-remkt' | 'mkt-chat'
   | 'seo-onpage' | 'seo-tech' | 'seo-perf' | 'seo-audit'
   | 'fin-gateways' | 'fin-trans' | 'fin-reports'
@@ -134,12 +135,19 @@ const App: React.FC = () => {
           const profile = await storeService.getProfileAfterLogin(data.session.user.id);
           if (profile) {
             if (profile.status === UserStatus.INACTIVE) {
+              setAuthError('Sua conta está inativa. Aguarde aprovação master.');
               await storeService.logout();
               setIsSystemReady(true);
               return;
             }
             currentSession = storeService.createSession(profile);
             handleRoleLanding(profile.role);
+          } else {
+            // OAuth ok no Supabase, mas e-mail não autorizado no Core > Usuários
+            setAuthError('Email não autorizado no sistema');
+            await storeService.logout();
+            setIsSystemReady(true);
+            return;
           }
         }
       }
@@ -192,6 +200,7 @@ const App: React.FC = () => {
   };
 
   const handleGoogleLogin = async () => {
+    setAuthError(null);
     const res = await storeService.loginWithGoogle();
     if (!res.success) setAuthError(res.error || 'Falha no Google Auth');
   };
@@ -205,7 +214,6 @@ const App: React.FC = () => {
   };
 
   const handleNavigate = (route: Route) => {
-    // Garante que a rolagem aconteça imediatamente para que o usuário veja o início da página selecionada
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setCurrentRoute(route);
     if (window.innerWidth <= 1024) setIsSidebarOpen(false);
@@ -264,6 +272,7 @@ const App: React.FC = () => {
               {currentRoute === 'checkout' && <CheckoutPage product={null} onComplete={() => handleNavigate('public-home')} />}
               {currentRoute === 'public-contact' && <PublicContact />}
               {currentRoute === 'affiliate-register' && <PublicAffiliateRegister onComplete={() => handleNavigate('public-home')} />}
+              {currentRoute === 'favorites' && <PublicFavorites user={session} onAddToCart={p => setCart([...cart, p])} onNavigate={handleNavigate} />}
            </main>
            <PublicFooter onNavigate={handleNavigate} />
            <AICoach isOpen={isCoachOpen} onClose={() => setIsCoachOpen(false)} />

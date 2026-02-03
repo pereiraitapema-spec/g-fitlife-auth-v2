@@ -1,3 +1,4 @@
+
 export interface Product {
   id: string;
   name: string;
@@ -16,6 +17,13 @@ export interface Product {
   categoryId?: string;
   sellerId?: string; 
   seo?: SEOMetadata;
+}
+
+export interface UserFavorite {
+  id: string;
+  userId: string;
+  productId: string;
+  createdAt: string;
 }
 
 export interface SEOMetadata {

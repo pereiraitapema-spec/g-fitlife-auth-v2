@@ -63,6 +63,15 @@ const PublicHeader: React.FC<PublicHeaderProps> = ({ onNavigate, cartCount, onOp
         <div className="flex items-center gap-4">
            {user ? (
               <div className="flex items-center gap-4">
+                 <button 
+                  onClick={() => onNavigate('favorites')}
+                  className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-emerald-500 hover:border-emerald-200 transition-all shadow-sm"
+                  title="Meus Favoritos"
+                 >
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                     <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                   </svg>
+                 </button>
                  <div className="hidden sm:block text-right">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Autenticado como</p>
                     <p className="text-xs font-black text-slate-800">{user.userName.split(' ')[0]}</p>

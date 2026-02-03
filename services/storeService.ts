@@ -1,7 +1,7 @@
 import { 
   Order, Lead, Product, Coupon, OrderStatus, 
   AppUser, Department, Category, SystemSettings, 
-  UserRole, UserStatus, UserSession, Affiliate, Commission, Banner, EmailTemplate, RemarketingLog, AIChatSession, PerformanceMetric, SystemLog, PaymentGateway, Transaction, Carrier, Delivery, AuditLog, SecurityEvent, DeployRecord, BackupRecord, InfraMetric, Seller, LGPDConsent, LGPDLog, PWANotification, ExternalAPIConfig, IntegrationSyncLog, WhatsAppMessage, AIRecommendation, AIPrediction, AIAutomationRule, AILogEntry, HelpTopic, RoleDefinition
+  UserRole, UserStatus, UserSession, Affiliate, Commission, Banner, EmailTemplate, RemarketingLog, AIChatSession, PerformanceMetric, SystemLog, PaymentGateway, Transaction, Carrier, Delivery, AuditLog, SecurityEvent, DeployRecord, BackupRecord, InfraMetric, Seller, LGPDConsent, LGPDLog, PWANotification, ExternalAPIConfig, IntegrationSyncLog, WhatsAppMessage, AIRecommendation, AIPrediction, AIAutomationRule, AILogEntry, HelpTopic, RoleDefinition, UserFavorite
 } from '../types';
 import { dbStore } from './db';
 import { supabase } from '../backend/supabaseClient';
@@ -80,7 +80,7 @@ export const storeService = {
           const profile = await this.getProfileAfterLogin(data.user.id);
           if (profile) {
             if (profile.status !== UserStatus.ACTIVE) {
-              return { success: false, error: 'Conta suspensa. Contate o suporte.' };
+              return { success: false, error: 'Conta suspensa ou aguardando aprovação.' };
             }
             const session = this.createSession(profile);
             const staffRoles = [
@@ -92,6 +92,9 @@ export const storeService = {
             ];
             const isStaff = staffRoles.includes(profile.role);
             return { success: true, session, profile, isStaff };
+          } else {
+             await supabase.auth.signOut();
+             return { success: false, error: 'Email não autorizado no sistema' };
           }
         } else if (error) {
            return { success: false, error: 'Credenciais inválidas ou acesso não autorizado.' };
@@ -109,13 +112,75 @@ export const storeService = {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin }
+        options: { 
+          redirectTo: window.location.origin,
+          queryParams: { prompt: 'select_account' }
+        }
       });
       if (error) return { success: false, error: error.message };
       return { success: true };
     } catch (err) {
       return { success: false, error: 'Erro ao conectar com Google Workspace' };
     }
+  },
+
+  async toggleFavorite(userId: string, productId: string): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      const { data: existing } = await supabase
+        .from('user_favorites')
+        .select('*')
+        .eq('userId', userId)
+        .eq('productId', productId)
+        .single();
+
+      if (existing) {
+        await supabase.from('user_favorites').delete().eq('id', existing.id);
+        return false; // Removido
+      } else {
+        await supabase.from('user_favorites').insert({
+          userId,
+          productId,
+          createdAt: new Date().toISOString()
+        });
+        return true; // Adicionado
+      }
+    } catch (err) {
+      return false;
+    }
+  },
+
+  async getFavorites(userId: string): Promise<Product[]> {
+    if (!supabase) return [];
+    try {
+      const { data: favs } = await supabase
+        .from('user_favorites')
+        .select('productId')
+        .eq('userId', userId);
+      
+      if (!favs || favs.length === 0) return [];
+      
+      const productIds = favs.map(f => f.productId);
+      const { data: products } = await supabase
+        .from('products')
+        .select('*')
+        .in('id', productIds);
+        
+      return products || [];
+    } catch (err) {
+      return [];
+    }
+  },
+
+  async isProductFavorited(userId: string, productId: string): Promise<boolean> {
+    if (!supabase) return false;
+    const { data } = await supabase
+      .from('user_favorites')
+      .select('id')
+      .eq('userId', userId)
+      .eq('productId', productId)
+      .single();
+    return !!data;
   },
 
   async registerAffiliate(data: { name: string, email: string, reason: string }) {
@@ -200,23 +265,25 @@ export const storeService = {
 
   async getProfileAfterLogin(userId: string) {
      if (!supabase) return null;
+
+     // 1. Tentar buscar pelo ID (Padrão Supabase Auth)
      const { data: profile } = await supabase.from('users_profile').select('*').eq('id', userId).single();
-     if (!profile) {
-        const { data: authUser } = await supabase.auth.getUser();
-        if (authUser.user) {
-           const newProfile = {
-             id: authUser.user.id,
-             name: authUser.user.user_metadata.full_name || 'Usuário G-FitLife',
-             email: authUser.user.email,
-             role: UserRole.CUSTOMER,
-             status: UserStatus.ACTIVE,
-             created_at: new Date().toISOString()
-           };
-           await supabase.from('users_profile').insert(newProfile);
-           return newProfile;
+     if (profile) return profile;
+
+     // 2. Se não encontrar pelo ID, buscar pelo E-mail (Fluxo OAuth para usuários pré-cadastrados)
+     const { data: { user: authUser } } = await supabase.auth.getUser();
+     if (authUser) {
+        const email = authUser.email?.toLowerCase();
+        const { data: allProfiles } = await supabase.from('users_profile').select('*');
+        const found = allProfiles?.find(p => p.email.toLowerCase() === email);
+        
+        if (found) {
+           // Sincroniza o ID da tabela de perfis com o ID do Auth do Supabase
+           await supabase.from('users_profile').update({ id: authUser.id }).eq('id', found.id);
+           return { ...found, id: authUser.id };
         }
      }
-     return profile;
+     return null;
   },
 
   async getSettings(): Promise<SystemSettings> {

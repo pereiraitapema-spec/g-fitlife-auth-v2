@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
-import { Product } from '../types';
+import { Product, UserSession } from '../types';
 import { storeService } from '../services/storeService';
 import { MOCK_PRODUCTS } from '../constants';
+import ProductCard from '../components/ProductCard';
 
 interface PublicCatalogProps {
   onBuy: (product: Product) => void;
@@ -14,13 +14,12 @@ const PublicCatalog: React.FC<PublicCatalogProps> = ({ onBuy, showOnlyOffers }) 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [email, setEmail] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
+  const [session, setSession] = useState<UserSession | null>(null);
 
-  /* Fixed: storeService.getProducts is async and needs await */
-  const loadProducts = async () => {
+  const loadData = async () => {
     const allProducts = await storeService.getProducts();
     const activeProducts = allProducts.filter(p => p.status === 'active');
     
-    // Se o catálogo estiver vazio, usamos os mocks para não quebrar a UI
     let finalProducts = activeProducts.length > 0 ? activeProducts : MOCK_PRODUCTS;
 
     if (showOnlyOffers) {
@@ -28,10 +27,13 @@ const PublicCatalog: React.FC<PublicCatalogProps> = ({ onBuy, showOnlyOffers }) 
     }
 
     setProducts(finalProducts);
+    setSession(storeService.getActiveSession());
   };
 
   useEffect(() => {
-    loadProducts();
+    loadData();
+    window.addEventListener('sessionUpdated', loadData);
+    return () => window.removeEventListener('sessionUpdated', loadData);
   }, [showOnlyOffers]);
 
   const handleProductClick = (product: Product) => {
@@ -39,7 +41,6 @@ const PublicCatalog: React.FC<PublicCatalogProps> = ({ onBuy, showOnlyOffers }) 
     setIsCapturing(true);
   };
 
-  /* Fixed: captureLead is async and needs await */
   const handleCaptureLead = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedProduct && email) {
@@ -70,35 +71,12 @@ const PublicCatalog: React.FC<PublicCatalogProps> = ({ onBuy, showOnlyOffers }) 
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
           {products.map(product => (
-            <div key={product.id} className="group bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 overflow-hidden flex flex-col h-full border-b-4 border-b-transparent hover:border-b-emerald-500">
-              <div className="relative aspect-[4/5] overflow-hidden bg-slate-50">
-                <img src={product.image} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={product.name} />
-                {product.originalPrice && (
-                   <div className="absolute top-6 left-6 bg-red-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">OFF</div>
-                )}
-                <div className="absolute top-6 right-6 bg-white/90 backdrop-blur-md p-2 rounded-2xl shadow-sm text-xs font-black flex items-center gap-1.5">
-                  <span className="text-amber-400">★</span> {product.rating || '5.0'}
-                </div>
-              </div>
-              <div className="p-8 flex flex-col flex-1">
-                <div className="flex-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{product.brand || 'G-Labs'}</p>
-                  <h3 className="text-xl font-black text-slate-800 line-clamp-2 mb-4 group-hover:text-emerald-500 transition-colors">{product.name}</h3>
-                  <div className="flex items-center gap-3 mb-8">
-                    <span className="text-2xl font-black text-slate-900">R$ {product.price.toFixed(2)}</span>
-                    {product.originalPrice && (
-                      <span className="text-sm text-slate-300 line-through">R$ {product.originalPrice.toFixed(2)}</span>
-                    )}
-                  </div>
-                </div>
-                <button 
-                  onClick={() => handleProductClick(product)}
-                  className="w-full py-5 bg-slate-900 text-white rounded-[24px] font-black text-sm hover:bg-emerald-500 transition-all duration-300 flex items-center justify-center gap-3 active:scale-[0.98]"
-                >
-                  VER PRODUTO / COMPRAR
-                </button>
-              </div>
-            </div>
+            <ProductCard 
+              key={product.id} 
+              product={product} 
+              onAddToCart={() => handleProductClick(product)} 
+              user={session}
+            />
           ))}
         </div>
       )}

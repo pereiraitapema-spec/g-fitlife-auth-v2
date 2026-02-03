@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Product, Banner } from '../types';
+import { Product, Banner, UserSession } from '../types';
 import { storeService } from '../services/storeService';
 import ProductCard from '../components/ProductCard';
 
@@ -13,16 +12,21 @@ const PublicHome: React.FC<PublicHomeProps> = ({ onNavigate, onAddToCart }) => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<UserSession | null>(null);
+
+  const loadData = async () => {
+    const bData = await storeService.getBanners();
+    const pData = await storeService.getProducts();
+    setBanners(bData.filter(b => b.status === 'active'));
+    setProducts(pData.slice(0, 4));
+    setSession(storeService.getActiveSession());
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const load = async () => {
-      const bData = await storeService.getBanners();
-      const pData = await storeService.getProducts();
-      setBanners(bData.filter(b => b.status === 'active'));
-      setProducts(pData.slice(0, 4));
-      setLoading(false);
-    };
-    load();
+    loadData();
+    window.addEventListener('sessionUpdated', loadData);
+    return () => window.removeEventListener('sessionUpdated', loadData);
   }, []);
 
   if (loading) return null;
@@ -83,7 +87,12 @@ const PublicHome: React.FC<PublicHomeProps> = ({ onNavigate, onAddToCart }) => {
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
            {products.map(p => (
-             <ProductCard key={p.id} product={p} onAddToCart={onAddToCart} />
+             <ProductCard 
+                key={p.id} 
+                product={p} 
+                onAddToCart={onAddToCart} 
+                user={session}
+             />
            ))}
         </div>
       </section>
