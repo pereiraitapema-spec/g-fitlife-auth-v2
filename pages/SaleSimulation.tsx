@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { Product, Order, OrderStatus, Coupon, CouponType, CartItem } from '../types';
+import { storeService } from '../services/storeService';
 
 interface SaleSimulationProps {
   onOrderComplete: () => void;
@@ -15,8 +15,11 @@ const SaleSimulation: React.FC<SaleSimulationProps> = ({ onOrderComplete }) => {
   const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('g_fitlife_catalog_products');
-    if (saved) setProducts(JSON.parse(saved).filter((p: Product) => p.status === 'active'));
+    const load = async () => {
+      const data = await storeService.getProducts();
+      setProducts(data.filter((p: Product) => p.status === 'active'));
+    };
+    load();
   }, []);
 
   const addToCart = (p: Product) => {
@@ -27,16 +30,13 @@ const SaleSimulation: React.FC<SaleSimulationProps> = ({ onOrderComplete }) => {
     });
   };
 
-  const applyCoupon = () => {
-    const saved = localStorage.getItem('g_fitlife_coupons');
-    if (saved) {
-      const coupons: Coupon[] = JSON.parse(saved);
-      const coupon = coupons.find(c => c.code === couponCode && c.status === 'active');
-      if (coupon) {
-        setAppliedCoupon(coupon);
-      } else {
-        alert('Cupom inválido ou inativo.');
-      }
+  const applyCoupon = async () => {
+    const coupons = await storeService.getCoupons();
+    const coupon = coupons.find(c => c.code === couponCode && c.status === 'active');
+    if (coupon) {
+      setAppliedCoupon(coupon);
+    } else {
+      alert('Cupom inválido ou inativo.');
     }
   };
 
@@ -53,14 +53,14 @@ const SaleSimulation: React.FC<SaleSimulationProps> = ({ onOrderComplete }) => {
 
   const { total, discount, final } = calculateTotals();
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (!customer.name || !customer.email || cart.length === 0) {
       alert('Preencha os dados do cliente e adicione itens ao carrinho.');
       return;
     }
 
     const newOrder: Order = {
-      id: Math.random().toString(36).substr(2, 9).toUpperCase(),
+      id: 'ORD-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
       customerName: customer.name,
       customerEmail: customer.email,
       items: cart,
@@ -72,9 +72,7 @@ const SaleSimulation: React.FC<SaleSimulationProps> = ({ onOrderComplete }) => {
       couponCode: appliedCoupon?.code
     };
 
-    const saved = localStorage.getItem('g_fitlife_orders');
-    const orders = saved ? JSON.parse(saved) : [];
-    localStorage.setItem('g_fitlife_orders', JSON.stringify([...orders, newOrder]));
+    await storeService.saveOrder(newOrder);
     
     setIsSuccess(true);
     setTimeout(() => {
@@ -87,7 +85,7 @@ const SaleSimulation: React.FC<SaleSimulationProps> = ({ onOrderComplete }) => {
       <div className="h-full flex flex-col items-center justify-center p-8 animate-in zoom-in-95">
         <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center text-white text-5xl mb-6 shadow-xl shadow-emerald-200">✓</div>
         <h2 className="text-3xl font-black text-slate-900 mb-2">Venda Realizada!</h2>
-        <p className="text-slate-500 font-bold tracking-tight">O pedido foi registrado com sucesso no sistema.</p>
+        <p className="text-slate-500 font-bold tracking-tight">O pedido foi registrado no banco de dados.</p>
       </div>
     );
   }
@@ -97,12 +95,11 @@ const SaleSimulation: React.FC<SaleSimulationProps> = ({ onOrderComplete }) => {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-2xl font-black text-slate-900">Simulador de Venda</h2>
-          <p className="text-slate-500">Crie pedidos de teste para validar o fluxo de pedidos e cupons.</p>
+          <p className="text-slate-500">Crie pedidos de teste vinculados à persistência real.</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Lado Esquerdo: Seleção */}
         <div className="space-y-8">
           <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm p-8 space-y-6">
             <h3 className="text-lg font-black text-slate-800">1. Dados do Cliente</h3>
@@ -140,14 +137,12 @@ const SaleSimulation: React.FC<SaleSimulationProps> = ({ onOrderComplete }) => {
           </div>
         </div>
 
-        {/* Lado Direito: Carrinho e Checkout */}
         <div className="space-y-6">
           <div className="bg-slate-900 rounded-[40px] p-8 text-white shadow-2xl space-y-8 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
             
             <h3 className="text-xl font-black">Resumo da Simulação</h3>
             
-            {/* Itens do Simulado */}
             <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
               {cart.length === 0 ? (
                 <p className="text-slate-500 text-sm font-bold italic">Nenhum item adicionado...</p>
@@ -164,7 +159,6 @@ const SaleSimulation: React.FC<SaleSimulationProps> = ({ onOrderComplete }) => {
               )}
             </div>
 
-            {/* Cupom */}
             <div className="pt-6 border-t border-white/10">
               <div className="flex gap-2">
                 <input 
@@ -184,7 +178,6 @@ const SaleSimulation: React.FC<SaleSimulationProps> = ({ onOrderComplete }) => {
               )}
             </div>
 
-            {/* Totais */}
             <div className="space-y-2 pt-6 border-t border-white/10">
               <div className="flex justify-between text-sm text-slate-400">
                 <span>Subtotal</span>

@@ -7,9 +7,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // Injeta EXCLUSIVAMENTE chaves públicas
-      'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL),
-      'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY),
+      // Injeta variáveis com fallback para string vazia para não quebrar a lógica de strings
+      'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL || ''),
+      'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY || ''),
       'process.env.NODE_ENV': JSON.stringify(mode),
     },
     build: {

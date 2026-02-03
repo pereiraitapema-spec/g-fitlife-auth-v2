@@ -1,11 +1,16 @@
 /**
  * GFITLIFE INDEXED-DB WRAPPER V3.0
- * Objetivo: Fonte única de verdade para persistência total do ecossistema.
+ * Objetivo: Fonte única de verdade para persistência local (cache) do ecossistema.
+ * Este arquivo lida EXCLUSIVAMENTE com o IndexedDB do navegador.
  */
 
 const DB_NAME = 'gfitlife_db_v3';
 const DB_VERSION = 3;
 
+/**
+ * Inicializa o banco de dados local.
+ * IMPORTANTE: NUNCA importe chaves de serviço ou o cliente admin do Supabase aqui.
+ */
 export const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -25,7 +30,7 @@ export const initDB = (): Promise<IDBDatabase> => {
         if (!db.objectStoreNames.contains(store)) {
           const keyPath = store === 'config' ? 'key' : 'id';
           db.createObjectStore(store, { keyPath });
-          console.log(`[DB] Store ${store} criada com sucesso (key: ${keyPath}).`);
+          console.log(`[DB-LOCAL] Store ${store} preparada (key: ${keyPath}).`);
         }
       });
     };
@@ -52,10 +57,9 @@ export const dbStore = {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(storeName, 'readwrite');
       const store = transaction.objectStore(storeName);
-      // Proteção adicional contra dados sem chave
       const keyPath = store.keyPath as string;
       if (!(data as any)[keyPath]) {
-         console.error(`[DB-ERROR] Tentativa de persistir em ${storeName} sem o campo obrigatório ${keyPath}.`, data);
+         console.error(`[DB-LOCAL-ERROR] Falta campo obrigatório ${keyPath} em ${storeName}.`, data);
          return reject(`Objeto inválido para store ${storeName}`);
       }
       const request = store.put(data);
