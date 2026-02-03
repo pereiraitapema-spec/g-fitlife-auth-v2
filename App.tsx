@@ -99,9 +99,7 @@ const App: React.FC = () => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
 
-  // Lógica OBRIGATÓRIA: Landings baseadas em Role
   const handleRoleLanding = (role: UserRole) => {
-    // Definimos quem são os colaboradores administrativos
     const isStaff = role === UserRole.ADMIN_MASTER || 
                     role === UserRole.ADMIN_OPERATIONAL || 
                     role === UserRole.FINANCE || 
@@ -202,44 +200,24 @@ const App: React.FC = () => {
     );
   }
 
-  // Se o modo admin foi solicitado (via botão ou automático) mas não há sessão ativa
   if (viewMode === 'admin' && !session) {
     return (
       <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
         <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl animate-in zoom-in-95 duration-700">
           <div className="text-center space-y-6">
             <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl shadow-emerald-500/20">G</div>
-            <div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Console Master</h1>
-              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Segurança G-FitLife</p>
-            </div>
-            
-            {authError && (
-              <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase border border-red-100 animate-pulse">
-                {authError}
-              </div>
-            )}
-            
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Console Master</h1>
+            {authError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase border border-red-100">{authError}</div>}
             <form onSubmit={handleLogin} className="space-y-4 pt-4">
-               <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="E-mail" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10 transition-all" required />
-               <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="Senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10 transition-all" required />
-               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-2xl shadow-emerald-500/10 active:scale-95">
-                 {isLoggingIn ? 'Autenticando...' : 'Entrar no Hub'}
-               </button>
+               <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="E-mail" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
+               <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="Senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
+               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all shadow-xl active:scale-95">Entrar no Hub</button>
             </form>
-
-            <div className="py-4 flex items-center gap-4">
-              <div className="flex-1 h-px bg-slate-100"></div>
-              <span className="text-[10px] font-black text-slate-300">OPÇÃO SSO</span>
-              <div className="flex-1 h-px bg-slate-100"></div>
-            </div>
-
             <button onClick={handleGoogleLogin} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95">
               <img src="https://img.icons8.com/color/48/google-logo.png" className="w-6 h-6" alt="" />
               Google Workspace
             </button>
-
-            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline decoration-2 underline-offset-4 transition-colors">Voltar para a Vitrine</button>
+            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline">Voltar para a Vitrine</button>
           </div>
         </div>
       </div>
@@ -258,13 +236,7 @@ const App: React.FC = () => {
 
       {viewMode === 'store' ? (
         <div className="min-h-screen bg-white flex flex-col relative w-full overflow-y-auto custom-scrollbar">
-           <PublicHeader 
-             onNavigate={handleNavigate} 
-             cartCount={cart.length} 
-             onOpenCoach={() => setIsCoachOpen(true)} 
-             onSwitchMode={() => setViewMode('admin')} 
-             user={session}
-           />
+           <PublicHeader onNavigate={handleNavigate} cartCount={cart.length} onOpenCoach={() => setIsCoachOpen(true)} onSwitchMode={() => setViewMode('admin')} user={session} />
            <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-12">
               {currentRoute === 'public-home' && <PublicHome onNavigate={handleNavigate} onAddToCart={p => setCart([...cart, p])} />}
               {currentRoute === 'departments' && <PublicDepartments onNavigate={handleNavigate} />}
@@ -294,7 +266,48 @@ const App: React.FC = () => {
                 {currentRoute === 'departments' && <Departments />}
                 {currentRoute === 'categories' && <CategoriesPage />}
                 {currentRoute === 'coupons' && <CouponsPage />}
-                {/* Outros módulos administrativos seguindo o mesmo padrão */}
+                {currentRoute === 'mkt-banners' && <MarketingBanners />}
+                {currentRoute === 'mkt-remkt' && <MarketingRemarketing />}
+                {currentRoute === 'mkt-chat' && <MarketingChatIA />}
+                {currentRoute === 'seo-onpage' && <SEOOnPage />}
+                {currentRoute === 'seo-tech' && <SEOTechnical />}
+                {currentRoute === 'seo-perf' && <SEOPerformance />}
+                {currentRoute === 'seo-audit' && <SEOMonitoring />}
+                {currentRoute === 'fin-gateways' && <FinancePayments />}
+                {currentRoute === 'fin-trans' && <FinanceTransactions />}
+                {currentRoute === 'fin-reports' && <FinanceReports />}
+                {currentRoute === 'mkp-sellers' && <MarketplaceSellers />}
+                {currentRoute === 'mkp-prods' && <MarketplaceProducts />}
+                {currentRoute === 'mkp-orders' && <MarketplaceOrders />}
+                {currentRoute === 'mkp-fin' && <MarketplaceFinance />}
+                {currentRoute === 'log-carriers' && <LogisticsCarriers />}
+                {currentRoute === 'log-rates' && <LogisticsRates />}
+                {currentRoute === 'log-deliveries' && <LogisticsDeliveries />}
+                {currentRoute === 'lgpd-consents' && <LGPDConsentPage />}
+                {currentRoute === 'lgpd-mydata' && <LGPDUserDataPage currentUser={session!} />}
+                {currentRoute === 'lgpd-logs' && <LGPDLogsPage />}
+                {currentRoute === 'lgpd-policy' && <LGPDPoliciesPage />}
+                {currentRoute === 'pwa-settings' && <PWASettings />}
+                {currentRoute === 'pwa-installs' && <PWAInstallation />}
+                {currentRoute === 'pwa-push' && <PWANotifications />}
+                {currentRoute === 'int-apis' && <IntegrationAPIs />}
+                {currentRoute === 'int-crm' && <IntegrationCRM />}
+                {currentRoute === 'int-wa' && <IntegrationWhatsApp />}
+                {currentRoute === 'int-erp' && <IntegrationERP />}
+                {currentRoute === 'ai-recom' && <AIRecommendations />}
+                {currentRoute === 'ai-predict' && <AIPredictions />}
+                {currentRoute === 'ai-automations' && <AIAutomations />}
+                {currentRoute === 'ai-logs' && <AILogs />}
+                {currentRoute === 'sec-auth' && <SecurityAuth currentUser={session!} />}
+                {currentRoute === 'sec-perms' && <SecurityPermissions />}
+                {currentRoute === 'sec-audit' && <SecurityAudit />}
+                {currentRoute === 'sec-logs' && <SecurityLogs />}
+                {currentRoute === 'infra-env' && <InfraEnvironment />}
+                {currentRoute === 'infra-deploy' && <InfraDeploy currentUser={session!} />}
+                {currentRoute === 'infra-backup' && <InfraBackup />}
+                {currentRoute === 'infra-monitoring' && <InfraMonitoring />}
+                {currentRoute === 'help-overview' && <HelpOverview />}
+                {currentRoute === 'help-core-detail' && <HelpCoreDetail />}
               </div>
             </main>
           </div>
