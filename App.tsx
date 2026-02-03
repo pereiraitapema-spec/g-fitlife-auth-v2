@@ -181,6 +181,7 @@ const App: React.FC = () => {
           setCurrentRoute('public-home');
           setFeedback({ message: 'Bem-vindo de volta!', type: 'success' });
         }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         setTimeout(() => setFeedback(null), 3000);
       } else {
         setAuthError(res.error || 'Acesso negado');
@@ -200,12 +201,14 @@ const App: React.FC = () => {
     setSession(null);
     setViewMode('store');
     setCurrentRoute('public-home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigate = (route: Route) => {
+    // Garante que a rolagem aconteça imediatamente para que o usuário veja o início da página selecionada
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setCurrentRoute(route);
     if (window.innerWidth <= 1024) setIsSidebarOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (!isSystemReady) {
@@ -244,7 +247,7 @@ const App: React.FC = () => {
     <div className="flex h-screen bg-slate-50 overflow-hidden relative">
       {feedback && (
         <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-10">
-          <div className="px-12 py-5 bg-slate-900 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest">
+          <div className={`px-12 py-5 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest ${feedback.type === 'error' ? 'bg-red-900' : 'bg-slate-900'}`}>
             {feedback.message}
           </div>
         </div>

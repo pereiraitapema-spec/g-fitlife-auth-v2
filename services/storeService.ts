@@ -83,7 +83,13 @@ export const storeService = {
               return { success: false, error: 'Conta suspensa. Contate o suporte.' };
             }
             const session = this.createSession(profile);
-            const staffRoles = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING, UserRole.SELLER];
+            const staffRoles = [
+              UserRole.ADMIN_MASTER, 
+              UserRole.ADMIN_OPERATIONAL, 
+              UserRole.FINANCE, 
+              UserRole.MARKETING, 
+              UserRole.SELLER
+            ];
             const isStaff = staffRoles.includes(profile.role);
             return { success: true, session, profile, isStaff };
           }
@@ -186,7 +192,6 @@ export const storeService = {
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random()}.${fileExt}`;
     const filePath = `public/${fileName}`;
-    // Fix: Alterado de 'media' para 'uploads' conforme solicitado
     const { error } = await supabase.storage.from('uploads').upload(filePath, file);
     if (error) throw error;
     const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filePath);

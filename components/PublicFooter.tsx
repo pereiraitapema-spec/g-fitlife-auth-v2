@@ -27,25 +27,60 @@ const PublicFooter: React.FC<PublicFooterProps> = ({ onNavigate }) => {
         <div className="space-y-6">
           <h4 className="text-lg font-black uppercase tracking-widest text-emerald-500">Links Úteis</h4>
           <ul className="space-y-4 text-slate-400 font-bold text-sm">
-            <li className="hover:text-white transition-colors cursor-pointer">Sobre a G-Labs</li>
-            <li className="hover:text-white transition-colors cursor-pointer">Trabalhe Conosco</li>
+            <li 
+              onClick={() => onNavigate && onNavigate('help-overview')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Sobre a G-Labs
+            </li>
+            <li 
+              onClick={() => onNavigate && onNavigate('public-contact')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Trabalhe Conosco
+            </li>
             <li 
               onClick={() => onNavigate && onNavigate('affiliate-register')}
               className="hover:text-emerald-400 transition-colors cursor-pointer font-black text-emerald-500/80"
             >
               Seja um Afiliado
             </li>
-            <li className="hover:text-white transition-colors cursor-pointer">Blog de Saúde</li>
+            <li 
+              onClick={() => onNavigate && onNavigate('store-catalog')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Catálogo Completo
+            </li>
           </ul>
         </div>
 
         <div className="space-y-6">
           <h4 className="text-lg font-black uppercase tracking-widest text-emerald-500">Ajuda & Suporte</h4>
           <ul className="space-y-4 text-slate-400 font-bold text-sm">
-            <li className="hover:text-white transition-colors cursor-pointer">Central de Ajuda</li>
-            <li className="hover:text-white transition-colors cursor-pointer">Rastrear Pedido</li>
-            <li className="hover:text-white transition-colors cursor-pointer">Políticas de Troca</li>
-            <li className="hover:text-white transition-colors cursor-pointer">Privacidade LGPD</li>
+            <li 
+              onClick={() => onNavigate && onNavigate('help-core-detail')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Central de Ajuda
+            </li>
+            <li 
+              onClick={() => onNavigate && onNavigate('checkout')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Rastrear Pedido
+            </li>
+            <li 
+              onClick={() => onNavigate && onNavigate('lgpd-policy')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Políticas de Troca
+            </li>
+            <li 
+              onClick={() => onNavigate && onNavigate('lgpd-policy')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Privacidade LGPD
+            </li>
           </ul>
         </div>
 
