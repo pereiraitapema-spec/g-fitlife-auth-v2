@@ -63,6 +63,13 @@ export const storeService = {
   },
 
   async login(email: string, pass: string) {
+    // Fallback Master Local ( admin@system.local / admin123 )
+    if (email.trim().toLowerCase() === 'admin@system.local' && pass === 'admin123') {
+      const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email, role: UserRole.ADMIN_MASTER, status: UserStatus.ACTIVE };
+      const session = this.createSession(fallbackAdmin);
+      return { success: true, session, profile: fallbackAdmin };
+    }
+
     if (supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -81,20 +88,18 @@ export const storeService = {
             if (profile.status !== UserStatus.ACTIVE) {
               return { success: false, error: 'Conta suspensa. Contate o administrador.' };
             }
+            
             const session = this.createSession(profile);
             return { success: true, session, profile };
+          } else {
+             return { success: false, error: 'Perfil não encontrado.' };
           }
+        } else if (error) {
+           return { success: false, error: error.message };
         }
       } catch (err) {
         console.error("Erro auth remota:", err);
       }
-    }
-    
-    // Fallback Master Local ( admin@system.local / admin123 )
-    if (email === 'admin@system.local' && pass === 'admin123') {
-      const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email, role: UserRole.ADMIN_MASTER, status: UserStatus.ACTIVE };
-      const session = this.createSession(fallbackAdmin);
-      return { success: true, session, profile: fallbackAdmin };
     }
     
     return { success: false, error: 'Credenciais incorretas ou falha na conexão.' };

@@ -99,16 +99,22 @@ const App: React.FC = () => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
 
+  // Lógica de Pouso por Papel (Role Landing)
   const handleRoleLanding = (role: UserRole) => {
-    const isStaff = role === UserRole.ADMIN_MASTER || 
-                    role === UserRole.ADMIN_OPERATIONAL || 
-                    role === UserRole.FINANCE || 
-                    role === UserRole.MARKETING;
+    // Lista de cargos que têm acesso ao Sistema Master (Admin)
+    const staffRoles = [
+      UserRole.ADMIN_MASTER, 
+      UserRole.ADMIN_OPERATIONAL, 
+      UserRole.FINANCE, 
+      UserRole.MARKETING,
+      UserRole.SELLER
+    ];
 
-    if (isStaff) {
+    if (staffRoles.includes(role)) {
       setViewMode('admin');
       setCurrentRoute('dashboard');
     } else {
+      // Clientes ou Afiliados (sem permissão master) vão para a Loja
       setViewMode('store');
       setCurrentRoute('public-home');
     }
@@ -200,6 +206,7 @@ const App: React.FC = () => {
     );
   }
 
+  // Se estiver tentando entrar no modo admin mas não estiver logado como STAFF
   if (viewMode === 'admin' && !session) {
     return (
       <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
