@@ -1,26 +1,32 @@
-
 import React, { useState, useEffect } from 'react';
-import { Order, OrderStatus } from '../types';
+import { Order, OrderStatus, Affiliate } from '../types';
 import { storeService } from '../services/storeService';
 
 const OrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [affiliates, setAffiliates] = useState<Affiliate[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [filterAffiliate, setFilterAffiliate] = useState<string>('all');
+  const [loading, setLoading] = useState(true);
 
-  /* Fixed: storeService.getOrders is asynchronous and needs await */
-  const loadOrders = async () => {
-    const data = await storeService.getOrders();
-    setOrders([...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+  const loadData = async () => {
+    setLoading(true);
+    const [ordersData, affiliatesData] = await Promise.all([
+      storeService.getOrders(),
+      storeService.getAffiliates()
+    ]);
+    setOrders([...ordersData].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    setAffiliates(affiliatesData);
+    setLoading(false);
   };
 
   useEffect(() => {
-    loadOrders();
+    loadData();
   }, []);
 
-  /* Fixed: updateStatus needs to await for the state to be consistent */
   const updateStatus = async (id: string, newStatus: OrderStatus) => {
     await storeService.updateOrderStatus(id, newStatus);
-    await loadOrders();
+    await loadData();
     if (selectedOrder?.id === id) {
       setSelectedOrder({ ...selectedOrder, status: newStatus });
     }
@@ -37,26 +43,79 @@ const OrdersPage: React.FC = () => {
     }
   };
 
+  const getAffiliateName = (id?: string) => {
+    if (!id) return 'Venda Direta';
+    return affiliates.find(a => a.id === id)?.name || 'Parceiro Externo';
+  };
+
+  const filteredOrders = filterAffiliate === 'all' 
+    ? orders 
+    : orders.filter(o => o.affiliateId === filterAffiliate);
+
+  const statsForAffiliate = filterAffiliate !== 'all' ? {
+    count: filteredOrders.length,
+    total: filteredOrders.reduce((acc, o) => acc + o.finalTotal, 0)
+  } : null;
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-6 duration-700 space-y-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight leading-none mb-3">Rastreamento Logístico</h2>
-          <p className="text-slate-500 font-medium">Histórico de vendas consolidado no Sistema do Studio.</p>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight leading-none mb-3 uppercase">Rastreamento Logístico</h2>
+          <p className="text-slate-500 font-medium">Histórico de vendas consolidado e auditoria de parceiros.</p>
         </div>
-        <div className="px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-3 shadow-2xl">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-          Studio Backend Link: Online
+        <div className="flex flex-col md:flex-row gap-4 items-center">
+          <div className="space-y-1 w-full md:w-64">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Filtrar por Afiliado</label>
+            <select 
+              value={filterAffiliate}
+              onChange={(e) => setFilterAffiliate(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+            >
+              <option value="all">TODOS OS PEDIDOS</option>
+              {affiliates.map(aff => (
+                <option key={aff.id} value={aff.id}>{aff.name.toUpperCase()} ({aff.refCode})</option>
+              ))}
+            </select>
+          </div>
+          <div className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-3 shadow-2xl h-fit">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            Sync: Online
+          </div>
         </div>
       </div>
 
+      {statsForAffiliate && (
+        <div className="bg-emerald-500 rounded-[32px] p-8 text-white flex flex-col md:flex-row justify-between items-center gap-6 shadow-xl animate-in zoom-in-95 duration-500">
+           <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-100 mb-1">Desempenho Individual</p>
+              <h3 className="text-2xl font-black">{affiliates.find(a => a.id === filterAffiliate)?.name}</h3>
+           </div>
+           <div className="flex gap-10">
+              <div className="text-center">
+                 <p className="text-[10px] font-black uppercase tracking-widest text-emerald-100">Vendas</p>
+                 <p className="text-3xl font-black">{statsForAffiliate.count}</p>
+              </div>
+              <div className="text-center">
+                 <p className="text-[10px] font-black uppercase tracking-widest text-emerald-100">Faturamento</p>
+                 <p className="text-3xl font-black text-white">R$ {statsForAffiliate.total.toFixed(2)}</p>
+              </div>
+           </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-12">
         {/* Painel Esquerdo: Listagem */}
-        <div className="xl:col-span-7 space-y-4">
-          {orders.length === 0 ? (
+        <div className="xl:col-span-8 space-y-4">
+          {loading ? (
+            <div className="bg-white rounded-[60px] border border-slate-100 p-32 text-center shadow-inner flex flex-col items-center gap-4">
+              <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-slate-400 font-black uppercase tracking-[0.3em] text-xs">Acessando Supabase Cloud...</p>
+            </div>
+          ) : filteredOrders.length === 0 ? (
             <div className="bg-white rounded-[60px] border-2 border-dashed border-slate-100 p-32 text-center shadow-inner flex flex-col items-center">
               <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center text-5xl mb-8 opacity-40">📊</div>
-              <p className="text-slate-400 font-black uppercase tracking-[0.3em] text-xs">Sem vendas registradas no sistema.</p>
+              <p className="text-slate-400 font-black uppercase tracking-[0.3em] text-xs">Sem pedidos registrados para este filtro.</p>
             </div>
           ) : (
             <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
@@ -64,14 +123,15 @@ const OrdersPage: React.FC = () => {
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-slate-50 border-b border-slate-100">
                     <tr>
-                      <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Protocolo</th>
-                      <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Comprador</th>
-                      <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
-                      <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fluxo</th>
+                      <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Protocolo</th>
+                      <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Comprador</th>
+                      <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Afiliado Responsável</th>
+                      <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
+                      <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fluxo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {orders.map(order => {
+                    {filteredOrders.map(order => {
                       const info = getStatusInfo(order.status);
                       return (
                         <tr 
@@ -79,18 +139,26 @@ const OrdersPage: React.FC = () => {
                           onClick={() => setSelectedOrder(order)}
                           className={`cursor-pointer group transition-all duration-300 ${selectedOrder?.id === order.id ? 'bg-emerald-50/70 border-l-4 border-l-emerald-500' : 'hover:bg-slate-50'}`}
                         >
-                          <td className="px-8 py-7">
+                          <td className="px-6 py-7">
                             <p className="font-black text-slate-900 text-sm tracking-tight group-hover:translate-x-1 transition-transform">#{order.id.split('-')[1] || order.id.slice(-6)}</p>
                             <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">{new Date(order.createdAt).toLocaleDateString('pt-BR')}</p>
                           </td>
-                          <td className="px-8 py-7">
+                          <td className="px-6 py-7">
                             <p className="font-bold text-slate-800 text-sm line-clamp-1">{order.customerName}</p>
                             <p className="text-[10px] text-slate-400 lowercase truncate max-w-[120px]">{order.customerEmail}</p>
                           </td>
-                          <td className="px-8 py-7 font-black text-slate-900 text-sm tracking-tighter">
+                          <td className="px-6 py-7">
+                            <div className="flex items-center gap-2">
+                               <span className={`w-2 h-2 rounded-full ${order.affiliateId ? 'bg-emerald-400' : 'bg-slate-300'}`}></span>
+                               <p className={`text-xs font-black uppercase tracking-tighter ${order.affiliateId ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                 {getAffiliateName(order.affiliateId)}
+                               </p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-7 font-black text-slate-900 text-sm tracking-tighter">
                             R$ {order.finalTotal.toFixed(2)}
                           </td>
-                          <td className="px-8 py-7">
+                          <td className="px-6 py-7">
                             <span className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 w-fit ${info.class} shadow-sm border border-white/10`}>
                               <span className="scale-125">{info.icon}</span>
                               {info.label}
@@ -107,9 +175,9 @@ const OrdersPage: React.FC = () => {
         </div>
 
         {/* Painel Direito: Console de Gestão */}
-        <div className="xl:col-span-5">
+        <div className="xl:col-span-4">
           {selectedOrder ? (
-            <div className="bg-white rounded-[60px] border border-slate-100 shadow-2xl p-12 sticky top-10 animate-in slide-in-from-right-10 duration-500 overflow-hidden">
+            <div className="bg-white rounded-[60px] border border-slate-100 shadow-2xl p-10 sticky top-10 animate-in slide-in-from-right-10 duration-500 overflow-hidden">
               <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl -mr-24 -mt-24"></div>
               
               <div className="flex justify-between items-start mb-12 relative">
@@ -127,27 +195,35 @@ const OrdersPage: React.FC = () => {
                   {selectedOrder.items.map((item, i) => (
                     <div key={i} className="flex justify-between items-center bg-slate-50 p-6 rounded-[32px] group hover:bg-white hover:shadow-xl transition-all border-2 border-transparent hover:border-emerald-100">
                       <div className="flex items-center gap-5">
-                        <img src={item.image} className="w-16 h-16 rounded-[24px] object-cover shadow-2xl" alt={item.name} />
+                        <img src={item.image} className="w-14 h-14 rounded-[20px] object-cover shadow-2xl" alt={item.name} />
                         <div>
                           <p className="text-sm font-black text-slate-900 line-clamp-1">{item.name}</p>
                           <p className="text-[10px] text-emerald-500 font-black uppercase tracking-widest bg-emerald-50 px-2 py-0.5 rounded mt-1 inline-block">QTD: {item.quantity}</p>
                         </div>
                       </div>
-                      <p className="text-sm font-black text-slate-900 tracking-tighter">R$ {(item.quantity * item.price).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
 
+                {/* Info do Afiliado no Pedido */}
+                <div className="bg-slate-50 p-6 rounded-[32px] border-2 border-emerald-500/10">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Responsabilidade de Venda</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-emerald-500 text-white rounded-full flex items-center justify-center text-xs">🤝</div>
+                    <p className="text-sm font-black text-slate-800">
+                      {getAffiliateName(selectedOrder.affiliateId)}
+                    </p>
+                  </div>
+                  {selectedOrder.couponCode && (
+                    <p className="mt-3 text-[9px] font-black text-emerald-600 bg-emerald-100/50 px-3 py-1 rounded-lg w-fit">CUPOM: {selectedOrder.couponCode}</p>
+                  )}
+                </div>
+
                 {/* Resumo Consolidado */}
-                <div className="bg-slate-900 rounded-[40px] p-10 text-white space-y-5 shadow-2xl relative overflow-hidden group">
-                  <div className="absolute bottom-0 right-0 w-32 h-32 bg-emerald-500/20 rounded-full blur-3xl -mb-16 -mr-16 transition-all group-hover:scale-150"></div>
-                  <div className="flex justify-between text-xs font-bold text-slate-400">
+                <div className="bg-slate-900 rounded-[40px] p-8 text-white space-y-4 shadow-2xl relative overflow-hidden group">
+                  <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
                     <span>Subtotal</span>
                     <span>R$ {selectedOrder.total.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs font-bold text-emerald-400">
-                    <span>Bonificações</span>
-                    <span>- R$ {selectedOrder.discount.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-3xl font-black pt-6 border-t border-white/10 mt-2">
                     <span className="tracking-tight">Total</span>
@@ -157,7 +233,7 @@ const OrdersPage: React.FC = () => {
 
                 {/* Fluxo Logístico Editável */}
                 <div className="space-y-4 pt-4">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-3">Estado Logístico (Studio DB Sync)</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-3">Estado Logístico (Supabase Cloud)</p>
                   <div className="grid grid-cols-1 gap-3">
                     {[
                       { s: OrderStatus.PAID, l: 'Aprovar Pagamento', c: 'hover:bg-emerald-500' },
@@ -169,10 +245,10 @@ const OrdersPage: React.FC = () => {
                         key={btn.s}
                         disabled={selectedOrder.status === btn.s}
                         onClick={() => updateStatus(selectedOrder.id, btn.s)}
-                        className={`group w-full py-6 px-8 rounded-[30px] text-xs font-black border-2 border-slate-100 transition-all duration-400 flex items-center justify-between ${btn.c} hover:text-white disabled:opacity-20 disabled:cursor-not-allowed disabled:grayscale shadow-sm active:scale-95`}
+                        className={`group w-full py-5 px-8 rounded-[24px] text-xs font-black border-2 border-slate-100 transition-all duration-400 flex items-center justify-between ${btn.c} hover:text-white disabled:opacity-20 disabled:cursor-not-allowed disabled:grayscale shadow-sm active:scale-95`}
                       >
                         {btn.l}
-                        <span className="opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0 font-bold">ACTIVATE →</span>
+                        <span className="opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0 font-bold">✓</span>
                       </button>
                     ))}
                   </div>
@@ -183,7 +259,7 @@ const OrdersPage: React.FC = () => {
             <div className="bg-slate-50 rounded-[70px] p-16 text-center flex flex-col items-center justify-center h-[600px] border-4 border-dashed border-white shadow-inner animate-in fade-in zoom-in-95">
               <div className="w-28 h-28 bg-white rounded-full flex items-center justify-center text-5xl shadow-xl mb-10 animate-bounce duration-[2500ms]">📊</div>
               <h4 className="text-2xl font-black text-slate-800 mb-3 tracking-tight">Análise de Transação</h4>
-              <p className="text-slate-400 font-medium max-w-xs mx-auto leading-relaxed">Selecione um pedido na listagem lateral para abrir as ferramentas de auditoria e controle logístico do Studio.</p>
+              <p className="text-slate-400 font-medium max-w-xs mx-auto leading-relaxed">Selecione um pedido na listagem lateral ou utilize os filtros para auditar o desempenho de parceiros no ecossistema.</p>
             </div>
           )}
         </div>

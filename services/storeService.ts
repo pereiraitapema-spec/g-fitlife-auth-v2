@@ -431,7 +431,14 @@ export const storeService = {
     }
     return await dbStore.getAll<Affiliate>('affiliates'); 
   },
-  async getCommissions(): Promise<Commission[]> { return await dbStore.getAll<Commission>('commissions'); },
+  async getCommissions(): Promise<Commission[]> { 
+    if (supabase) {
+      // Busca comissões incluindo dados do afiliado relacionado
+      const { data } = await supabase.from('commissions').select('*, affiliate:affiliates(name)');
+      return data || [];
+    }
+    return await dbStore.getAll<Commission>('commissions'); 
+  },
   async getBanners(): Promise<Banner[]> { return await dbStore.getAll<Banner>('banners'); },
   async saveBanner(banner: Banner): Promise<void> { await dbStore.put('banners', banner); window.dispatchEvent(new Event('bannersChanged')); },
   async getRemarketingLogs(): Promise<RemarketingLog[]> { return await dbStore.getAll<RemarketingLog>('remarketing_logs'); },
