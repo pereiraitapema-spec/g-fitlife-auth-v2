@@ -2,27 +2,24 @@ import { createClient } from '@supabase/supabase-js';
 
 /**
  * CLIENTE SUPABASE PARA FRONTEND (BROWSER)
- * Configurado via Vite 'define'. 
- * Utiliza apenas a Anon Public Key.
+ * Utiliza APENAS a Anon Public Key.
  */
 
-// O Vite substituirá 'process.env.X' pelas strings literais durante o build
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('⚠️ Aguardando configuração do Supabase... Verifique o arquivo .env e o build do Vite.');
+// Validação de Segurança: Bloqueia chaves service_role no navegador
+if (supabaseAnonKey.includes('service_role')) {
+  console.error('🚨 SEGURANÇA: Chave secreta detectada no frontend! O Supabase bloqueou a inicialização para sua proteção.');
 }
 
-// Exporta o cliente apenas se as URLs existirem, prevenindo o erro "supabaseUrl is required"
-export const supabase = (supabaseUrl && supabaseAnonKey) 
+export const supabase = (supabaseUrl && supabaseAnonKey && !supabaseAnonKey.includes('service_role')) 
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-// Helper para garantir que não chamemos métodos em um cliente nulo
 export const getSupabase = () => {
   if (!supabase) {
-    throw new Error('Supabase Client não inicializado. Verifique SUPABASE_URL e SUPABASE_ANON_KEY.');
+    throw new Error('Supabase Client indisponível ou configurado com chave inválida no frontend.');
   }
   return supabase;
 };

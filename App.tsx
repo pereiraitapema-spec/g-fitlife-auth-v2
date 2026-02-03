@@ -119,10 +119,10 @@ const App: React.FC = () => {
         }
         
         if (sbSession) {
+          // ATUALIZADO: Busca perfil na users_profile
           const profile = await storeService.getProfileAfterLogin(sbSession.user.id);
           
           if (profile) {
-            // VALIDAÇÃO DE STATUS DO PERFIL (REGRA OBRIGATÓRIA)
             if (profile.status !== UserStatus.ACTIVE) {
                setAuthError("Sua conta está suspensa ou inativa. Contate o suporte.");
                if (supabase) await supabase.auth.signOut();
@@ -143,8 +143,7 @@ const App: React.FC = () => {
               setCurrentRoute('public-home');
             }
           } else {
-             // Caso usuário autenticado via OAuth mas não tenha perfil na 'profiles'
-             setAuthError("Acesso administrativo negado. Perfil não autorizado.");
+             setAuthError("Perfil não autorizado no banco de dados.");
              if (supabase) await supabase.auth.signOut();
           }
         } else {
@@ -231,7 +230,6 @@ const App: React.FC = () => {
         showFeedback(res.error || "Erro de Auth", "error");
         setIsLoggingIn(false);
       }
-      // O Supabase redirecionará para o Google, o retorno é tratado no useEffect bootstrap
     } catch (e) {
       setIsLoggingIn(false);
     }
@@ -299,13 +297,6 @@ const App: React.FC = () => {
       case 'ai-predict': return <AIPredictions />;
       case 'ai-automations': return <AIAutomations />;
       case 'ai-logs': return <AILogs />;
-      case 'pwa-settings': return <PWASettings />;
-      case 'pwa-installs': return <PWAInstallation />;
-      case 'pwa-push': return <PWANotifications />;
-      case 'int-apis': return <IntegrationAPIs />;
-      case 'int-crm': return <IntegrationCRM />;
-      case 'int-wa': return <IntegrationWhatsApp />;
-      case 'int-erp': return <IntegrationERP />;
       case 'sec-auth': return <SecurityAuth currentUser={session} />;
       case 'sec-perms': return <SecurityPermissions />;
       case 'sec-audit': return <SecurityAudit />;

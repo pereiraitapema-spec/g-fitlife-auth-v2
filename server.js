@@ -3,26 +3,25 @@ const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-// Importação do cliente admin corrigido
 const { supabaseAdmin } = require('./backend/supabaseAdmin');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 1. Seed Automático do Usuário Master (admin@system.local / admin123)
+// 1. Seed Automático do Usuário Master (Utiliza ENV para não expor senhas)
 async function seedMasterUser() {
   try {
-    const email = 'admin@system.local';
-    const password = 'admin123';
+    const email = process.env.MASTER_EMAIL || 'admin@system.local';
+    const password = process.env.MASTER_PASSWORD || 'admin123';
 
-    console.log('[CORE-SEED] Verificando integridade do Master...');
+    console.log('[CORE-SEED] Validando Usuário Master no Supabase Auth...');
     
     const { data: userByEmail } = await supabaseAdmin.auth.admin.listUsers();
     let targetUser = userByEmail.users.find(u => u.email === email);
 
     if (!targetUser) {
-      console.log('[CORE-SEED] Master não encontrado no Auth. Criando...');
+      console.log('[CORE-SEED] Criando novo Master no Auth...');
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
@@ -34,7 +33,8 @@ async function seedMasterUser() {
     }
 
     if (targetUser) {
-      const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
+      // ATUALIZADO: Usando tabela 'users_profile' conforme solicitado
+      const { error: profileError } = await supabaseAdmin.from('users_profile').upsert({
         id: targetUser.id,
         name: 'G-FitLife Master',
         email,
@@ -44,17 +44,15 @@ async function seedMasterUser() {
       });
 
       if (profileError) throw profileError;
-      console.log('[CORE-SEED] Master User validado e ativo.');
+      console.log('[CORE-SEED] Perfil Master em "users_profile" garantido.');
     }
   } catch (err) {
-    console.error('[CORE-SEED] Falha crítica:', err.message);
+    console.error('[CORE-SEED] Falha na inicialização segura:', err.message);
   }
 }
 
-// Executar seed ao subir o servidor
 seedMasterUser();
 
-// 2. Middlewares de Segurança e Log
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
@@ -63,7 +61,7 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// 3. API Administrativa (Utiliza o supabaseAdmin seguro no backend)
+// 3. API Administrativa Segura
 app.post('/api/admin/create-user', async (req, res) => {
   try {
     const { email, password, name, role } = req.body;
@@ -75,7 +73,7 @@ app.post('/api/admin/create-user', async (req, res) => {
     });
     if (authError) return res.status(400).json({ error: authError.message });
 
-    const { error: profileError } = await supabaseAdmin.from('profiles').insert({
+    const { error: profileError } = await supabaseAdmin.from('users_profile').insert({
       id: authUser.user.id,
       name,
       email,
@@ -96,12 +94,14 @@ app.delete('/api/admin/delete-user', async (req, res) => {
     const { userId } = req.body;
     
     const { data: user } = await supabaseAdmin.auth.admin.getUserById(userId);
-    if (user?.user?.email === 'admin@system.local') {
+    const masterEmail = process.env.MASTER_EMAIL || 'admin@system.local';
+    
+    if (user?.user?.email === masterEmail) {
       return res.status(403).json({ error: 'Operação proibida para o Core Master' });
     }
 
     await supabaseAdmin.auth.admin.deleteUser(userId);
-    await supabaseAdmin.from('profiles').delete().eq('id', userId);
+    await supabaseAdmin.from('users_profile').delete().eq('id', userId);
 
     res.status(200).json({ status: 'ok' });
   } catch (err) {
@@ -113,7 +113,6 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime() });
 });
 
-// 4. Servir Build do React (Vite)
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));

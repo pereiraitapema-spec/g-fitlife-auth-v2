@@ -11,7 +11,6 @@ const KEY_SESSION = 'auth_session';
 export const storeService = {
   async initializeSystem(): Promise<void> {
     try {
-      // 1. Configurações Globais
       const { data: remoteConfig, error: cfgError } = await (supabase ? supabase.from('core_settings').select('*').eq('key', 'geral').single() : { data: null, error: null });
 
       if (remoteConfig && !cfgError) {
@@ -44,7 +43,6 @@ export const storeService = {
         }
       }
 
-      // 2. Inicialização de Módulos (Seeds se vazio)
       const checkAndSeed = async (storeName: string, defaultData: any[]) => {
         const existing = await dbStore.getAll(storeName);
         if (existing.length === 0) {
@@ -54,33 +52,28 @@ export const storeService = {
         }
       };
 
-      // Seed de Departamentos
       await checkAndSeed('departments', [
         { id: 'dept-1', name: 'Suplementação', status: 'active' },
         { id: 'dept-2', name: 'Equipamentos', status: 'active' },
         { id: 'dept-3', name: 'Vestuário', status: 'active' }
       ]);
 
-      // Seed de Gateways
       await checkAndSeed('gateways', [
         { id: 'gw-1', name: 'Stripe Enterprise', type: 'credit_card', status: 'active', config: {} },
         { id: 'gw-2', name: 'G-Pay Pix', type: 'pix', status: 'active', config: {} }
       ]);
 
-      // Seed de Carriers
       await checkAndSeed('carriers', [
         { id: 'car-1', name: 'G-Log Express', type: 'express', status: 'active' },
         { id: 'car-2', name: 'Total Express', type: 'standard', status: 'active' }
       ]);
 
-      // Seed de IA (Predicts & Recommendations) - FIXED: Added id field
       await checkAndSeed('ai_predictions', [
         { id: 'pred-1', period: 'Jul/2024', projectedSales: 125000, confidence: 94, insights: ['Alta demanda por Whey Isolate', 'Sazonalidade favorável'] }
       ]);
 
-      // 3. Sincronização de Usuários
       if (supabase) {
-        const { data: remoteUsers } = await supabase.from('profiles').select('*');
+        const { data: remoteUsers } = await supabase.from('users_profile').select('*');
         if (remoteUsers) {
           for (const u of remoteUsers) {
             await dbStore.put('users', u);
@@ -102,9 +95,8 @@ export const storeService = {
 
         if (error) return { success: false, error: error.message };
 
-        // BUSCA PERFIL REAL NO BANCO PARA PEGAR A ROLE ATUALIZADA
         const { data: profile, error: profileError } = await supabase
-          .from('profiles')
+          .from('users_profile')
           .select('*')
           .eq('id', data.user.id)
           .single();
@@ -116,21 +108,9 @@ export const storeService = {
         const session = this.createSession(profile);
         return { success: true, session, forcePasswordChange: profile.isDefaultPassword };
       } catch (err) {
-         // Fallback para admin master offline em ambiente de desenvolvimento se falhar conexão
-         if (email === 'admin@system.local' && pass === 'admin123') {
-           const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email, role: UserRole.ADMIN_MASTER };
-           return { success: true, session: this.createSession(fallbackAdmin) };
-         }
-         return { success: false, error: 'Erro de conexão com o banco.' };
+         return { success: false, error: 'Erro de comunicação com o servidor de Auth.' };
       }
     }
-    
-    // Login local / offline para desenvolvimento
-    if (email === 'admin@system.local' && pass === 'admin123') {
-      const fallbackAdmin = { id: 'master-0', name: 'Master User', email, role: UserRole.ADMIN_MASTER };
-      return { success: true, session: this.createSession(fallbackAdmin) };
-    }
-    
     return { success: false, error: 'Falha na comunicação com o servidor de Auth.' };
   },
 
@@ -138,9 +118,7 @@ export const storeService = {
     if (!supabase) return { success: false, error: 'Serviço de autenticação offline.' };
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { 
-        redirectTo: window.location.origin 
-      }
+      options: { redirectTo: window.location.origin }
     });
     if (error) return { success: false, error: error.message };
     return { success: true };
@@ -148,7 +126,7 @@ export const storeService = {
 
   async getProfileAfterLogin(userId: string) {
      if (!supabase) return null;
-     const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
+     const { data: profile } = await supabase.from('users_profile').select('*').eq('id', userId).single();
      return profile;
   },
 
@@ -181,7 +159,7 @@ export const storeService = {
     try {
       const { error: authError } = await supabase.auth.updateUser({ email: email.trim().toLowerCase(), password: pass });
       if (authError) throw authError;
-      const { error: profileError } = await supabase.from('profiles').update({ email: email.trim().toLowerCase() }).eq('id', userId);
+      const { error: profileError } = await supabase.from('users_profile').update({ email: email.trim().toLowerCase() }).eq('id', userId);
       if (profileError) throw profileError;
       return true;
     } catch (err) {
@@ -193,7 +171,7 @@ export const storeService = {
   async saveUser(u: AppUser): Promise<void> {
     await dbStore.put('users', u);
     if (supabase) {
-      const { error } = await supabase.from('profiles').upsert({
+      const { error } = await supabase.from('users_profile').upsert({
         id: u.id, name: u.name, email: u.email, role: u.role, status: u.status, updated_at: new Date().toISOString()
       });
       if (error) throw new Error("Erro de sincronização remota.");
@@ -251,7 +229,7 @@ export const storeService = {
 
   async getUsers(): Promise<AppUser[]> {
     if (supabase) {
-      const { data: remoteUsers } = await supabase.from('profiles').select('*');
+      const { data: remoteUsers } = await supabase.from('users_profile').select('*');
       if (remoteUsers) return remoteUsers as AppUser[];
     }
     return await dbStore.getAll<AppUser>('users');
@@ -287,15 +265,16 @@ export const storeService = {
   },
 
   async updateUserStatus(id: string, status: UserStatus): Promise<void> {
-    if (supabase) await supabase.from('profiles').update({ status }).eq('id', id);
+    if (supabase) await supabase.from('users_profile').update({ status }).eq('id', id);
     window.dispatchEvent(new Event('usersChanged'));
   },
 
   async deleteUser(id: string): Promise<boolean> {
     if (supabase) {
-      const { data: user } = await supabase.from('profiles').select('*').eq('id', id).single();
-      if (user && user.email === 'admin@system.local') return false;
-      const { error } = await supabase.from('profiles').delete().eq('id', id);
+      const { data: user } = await supabase.from('users_profile').select('*').eq('id', id).single();
+      const masterEmail = 'admin@system.local'; // Idealmente via ENV
+      if (user && user.email === masterEmail) return false;
+      const { error } = await supabase.from('users_profile').delete().eq('id', id);
       if (error) return false;
     }
     window.dispatchEvent(new Event('usersChanged'));
@@ -414,7 +393,6 @@ export const storeService = {
   async getAIAutomations(): Promise<AIAutomationRule[]> { return await dbStore.getAll<AIAutomationRule>('ai_automations'); },
   async saveAIAutomation(rule: AIAutomationRule): Promise<void> { await dbStore.put('ai_automations', rule); window.dispatchEvent(new Event('aiAutomationsChanged')); },
   async getAILogs(): Promise<AILogEntry[]> { return await dbStore.getAll<AILogEntry>('ai_logs'); },
-  // Fix: Line 411 - replaced 'rule' with 'role' to match parameter name
   async saveRole(role: RoleDefinition): Promise<void> { await dbStore.put('roles', role); window.dispatchEvent(new Event('rolesChanged')); },
   async getHelpTopic(id: string): Promise<HelpTopic | null> {
     const topic = await dbStore.getByKey<HelpTopic>('help_topics', id);
