@@ -1,3 +1,4 @@
+
 import { 
   Order, Lead, Product, Coupon, OrderStatus, 
   AppUser, Department, Category, SystemSettings, 
@@ -63,9 +64,9 @@ export const storeService = {
   },
 
   async login(email: string, pass: string) {
-    // Fallback Master Local (admin@system.local)
+    // Fallback Master Local
     if (email.trim().toLowerCase() === 'admin@system.local' && pass === 'admin123') {
-      const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email, role: UserRole.ADMIN_MASTER, status: UserStatus.ACTIVE };
+      const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email: email.toLowerCase(), role: UserRole.ADMIN_MASTER, status: UserStatus.ACTIVE };
       const session = this.createSession(fallbackAdmin);
       return { success: true, session, profile: fallbackAdmin };
     }
@@ -79,43 +80,122 @@ export const storeService = {
 
         if (!error && data.user) {
           const profile = await this.getProfileAfterLogin(data.user.id);
-
           if (profile) {
             if (profile.status !== UserStatus.ACTIVE) {
-              return { success: false, error: 'Conta suspensa. Contate o administrador.' };
+              return { success: false, error: 'Conta suspensa. Contate o suporte.' };
             }
             const session = this.createSession(profile);
-            return { success: true, session, profile };
+            const isStaff = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING, UserRole.SELLER].includes(profile.role);
+            return { success: true, session, profile, isStaff };
           }
         } else if (error) {
-           // Se o erro for de credenciais inválidas ou usuário não existe
-           if (error.message.includes('Invalid login credentials') || error.status === 400) {
-             return { success: false, isUnregistered: true, error: 'E-mail não cadastrado como Staff. Direcionando para a loja...' };
-           }
-           return { success: false, error: error.message };
+           return { success: false, error: 'Credenciais inválidas ou acesso negado.' };
         }
       } catch (err) {
         console.error("Erro auth remota:", err);
       }
     }
     
-    return { success: false, error: 'Falha na conexão com o servidor de autenticação.' };
+    return { success: false, error: 'Falha na conexão com o servidor.' };
   },
 
+  // Fix: Added missing loginWithGoogle method to resolve "Property 'loginWithGoogle' does not exist" error in App.tsx
   async loginWithGoogle() {
-    if (!supabase) return { success: false, error: 'Serviço de autenticação offline.' };
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    });
-    if (error) return { success: false, error: error.message };
-    return { success: true };
+    if (supabase) {
+      try {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin
+          }
+        });
+        if (error) return { success: false, error: error.message };
+        return { success: true };
+      } catch (err) {
+        console.error("Erro Google Auth:", err);
+        return { success: false, error: 'Falha na conexão com Google' };
+      }
+    }
+    return { success: false, error: 'Supabase não configurado' };
+  },
+
+  async registerAffiliate(data: { name: string, email: string, reason: string }) {
+    if (supabase) {
+      // Criação de perfil preliminar para aprovação
+      const newAffiliate = {
+        name: data.name,
+        email: data.email.toLowerCase(),
+        role: UserRole.AFFILIATE,
+        status: UserStatus.INACTIVE, // Precisa de liberação master
+        created_at: new Date().toISOString()
+      };
+      
+      const { data: res, error } = await supabase.from('users_profile').insert(newAffiliate).select().single();
+      if (error) throw error;
+
+      // Cria registro na tabela de afiliados
+      await supabase.from('affiliates').insert({
+        userId: res.id,
+        name: res.name,
+        email: res.email,
+        status: 'inactive',
+        commissionRate: 10,
+        totalSales: 0,
+        balance: 0,
+        refCode: Math.random().toString(36).substring(7).toUpperCase()
+      });
+
+      return { success: true };
+    }
+    return { success: false };
+  },
+
+  async approveAffiliate(userId: string) {
+    if (supabase) {
+      await supabase.from('users_profile').update({ status: UserStatus.ACTIVE }).eq('id', userId);
+      await supabase.from('affiliates').update({ status: 'active' }).eq('userId', userId);
+      window.dispatchEvent(new Event('usersChanged'));
+      return true;
+    }
+    return false;
+  },
+
+  async updateMyCredentials(userId: string, email: string, password?: string) {
+    if (!supabase) return false;
+    
+    try {
+      const updates: any = { email };
+      if (password) updates.password = password;
+
+      const { error } = await supabase.auth.updateUser(updates);
+      if (error) throw error;
+
+      // Log de auditoria
+      await this.logAudit(userId, `Alterou e-mail/senha da própria conta.`);
+      
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  async logAudit(userId: string, action: string) {
+    if (supabase) {
+      const { data: user } = await this.getUsers();
+      const userName = user.find((u: any) => u.id === userId)?.name || 'Usuário';
+      await supabase.from('audit_logs').insert({
+        userId,
+        userName,
+        action,
+        timestamp: new Date().toISOString()
+      });
+    }
   },
 
   async getProfileAfterLogin(userId: string) {
      if (!supabase) return null;
      const { data: profile } = await supabase.from('users_profile').select('*').eq('id', userId).single();
-     
      if (!profile) {
         const { data: authUser } = await supabase.auth.getUser();
         if (authUser.user) {
@@ -218,19 +298,6 @@ export const storeService = {
     return true;
   },
 
-  async updateAdminCredentials(userId: string, email: string, pass: string): Promise<boolean> {
-    if (!supabase) return false;
-    const { error } = await supabase.auth.updateUser({ email, password: pass });
-    if (error) {
-      console.error("Erro ao atualizar credenciais:", error);
-      return false;
-    }
-    const allUsers = await this.getUsers();
-    const user = allUsers.find(u => u.id === userId);
-    if (user) await this.saveUser({ ...user, email: email });
-    return true;
-  },
-
   async getProducts(): Promise<Product[]> { return await dbStore.getAll<Product>('products'); },
   async getOrders(): Promise<Order[]> { return await dbStore.getAll<Order>('orders'); },
   async getDepartments(): Promise<Department[]> { return await dbStore.getAll<Department>('departments'); },
@@ -296,7 +363,13 @@ export const storeService = {
     window.dispatchEvent(new Event('leadsChanged'));
   },
   async getLeads(): Promise<Lead[]> { return await dbStore.getAll<Lead>('leads'); },
-  async getAffiliates(): Promise<Affiliate[]> { return await dbStore.getAll<Affiliate>('affiliates'); },
+  async getAffiliates(): Promise<Affiliate[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('affiliates').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Affiliate>('affiliates'); 
+  },
   async getCommissions(): Promise<Commission[]> { return await dbStore.getAll<Commission>('commissions'); },
   async getBanners(): Promise<Banner[]> { return await dbStore.getAll<Banner>('banners'); },
   async saveBanner(banner: Banner): Promise<void> { await dbStore.put('banners', banner); window.dispatchEvent(new Event('bannersChanged')); },
@@ -319,7 +392,13 @@ export const storeService = {
   async getCarriers(): Promise<Carrier[]> { return await dbStore.getAll<Carrier>('carriers'); },
   async getDeliveries(): Promise<Delivery[]> { return await dbStore.getAll<Delivery>('deliveries'); },
   async getSessions(): Promise<UserSession[]> { return await dbStore.getAll<UserSession>('sessions'); },
-  async getAuditLogs(): Promise<AuditLog[]> { return await dbStore.getAll<AuditLog>('audit_logs'); },
+  async getAuditLogs(): Promise<AuditLog[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('audit_logs').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<AuditLog>('audit_logs'); 
+  },
   async getSecurityEvents(): Promise<SecurityEvent[]> { return await dbStore.getAll<SecurityEvent>('security_events'); },
   async updateEnvironment(env: string): Promise<void> {
     const settings = await this.getSettings();

@@ -1,7 +1,11 @@
-
 import React from 'react';
+import { Route } from '../App';
 
-const PublicFooter: React.FC = () => {
+interface PublicFooterProps {
+  onNavigate?: (route: Route) => void;
+}
+
+const PublicFooter: React.FC<PublicFooterProps> = ({ onNavigate }) => {
   return (
     <footer className="bg-slate-900 text-white py-20 mt-20">
       <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-16">
@@ -25,7 +29,12 @@ const PublicFooter: React.FC = () => {
           <ul className="space-y-4 text-slate-400 font-bold text-sm">
             <li className="hover:text-white transition-colors cursor-pointer">Sobre a G-Labs</li>
             <li className="hover:text-white transition-colors cursor-pointer">Trabalhe Conosco</li>
-            <li className="hover:text-white transition-colors cursor-pointer">Seja um Afiliado</li>
+            <li 
+              onClick={() => onNavigate && onNavigate('affiliate-register')}
+              className="hover:text-emerald-400 transition-colors cursor-pointer font-black text-emerald-500/80"
+            >
+              Seja um Afiliado
+            </li>
             <li className="hover:text-white transition-colors cursor-pointer">Blog de Saúde</li>
           </ul>
         </div>

@@ -19,6 +19,7 @@ import Departments from './pages/Departments';
 import CategoriesPage from './pages/CategoriesPage';
 import CouponsPage from './pages/CouponsPage';
 import PublicContact from './pages/PublicContact';
+import PublicAffiliateRegister from './pages/PublicAffiliateRegister';
 import AICoach from './components/AICoach';
 import LGPDBanner from './components/LGPDBanner';
 
@@ -40,6 +41,10 @@ import MarketplaceSellers from './pages/MarketplaceSellers';
 import MarketplaceProducts from './pages/MarketplaceProducts';
 import MarketplaceOrders from './pages/MarketplaceOrders';
 import MarketplaceFinance from './pages/MarketplaceFinance';
+import AffiliatesOverview from './pages/AffiliatesOverview';
+import AffiliatesCommissions from './pages/AffiliatesCommissions';
+import AffiliatesLinks from './pages/AffiliatesLinks';
+import AffiliatesReports from './pages/AffiliatesReports';
 import LGPDConsentPage from './pages/LGPDConsentPage';
 import LGPDUserDataPage from './pages/LGPDUserDataPage';
 import LGPDLogsPage from './pages/LGPDLogsPage';
@@ -70,7 +75,7 @@ import { supabase } from './backend/supabaseClient';
 
 export type Route = 
   | 'dashboard' | 'core-settings' | 'core-users' | 'core-roles' 
-  | 'help-overview' | 'help-core-detail'
+  | 'help-overview' | 'help-core-detail' | 'affiliate-register'
   | 'products-catalog' | 'orders' | 'store-catalog' | 'checkout' | 'store-offers' | 'public-contact'
   | 'public-home' | 'departments' | 'categories' | 'coupons'
   | 'mkt-banners' | 'mkt-remkt' | 'mkt-chat'
@@ -78,6 +83,7 @@ export type Route =
   | 'fin-gateways' | 'fin-trans' | 'fin-reports'
   | 'log-carriers' | 'log-rates' | 'log-deliveries'
   | 'mkp-sellers' | 'mkp-prods' | 'mkp-orders' | 'mkp-fin'
+  | 'aff-overview' | 'aff-commissions' | 'aff-links' | 'aff-reports'
   | 'lgpd-consents' | 'lgpd-mydata' | 'lgpd-logs' | 'lgpd-policy'
   | 'pwa-settings' | 'pwa-installs' | 'pwa-push'
   | 'int-apis' | 'int-crm' | 'int-wa' | 'int-erp'
@@ -99,7 +105,6 @@ const App: React.FC = () => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
 
-  // Lógica de Pouso por Papel (Role Landing)
   const handleRoleLanding = (role: UserRole) => {
     const staffRoles = [
       UserRole.ADMIN_MASTER, 
@@ -113,7 +118,6 @@ const App: React.FC = () => {
       setViewMode('admin');
       setCurrentRoute('dashboard');
     } else {
-      // Clientes ou Afiliados (sem permissão master) vão para a Loja
       setViewMode('store');
       setCurrentRoute('public-home');
     }
@@ -168,17 +172,17 @@ const App: React.FC = () => {
       const res = await storeService.login(loginEmail, loginPass);
       if (res.success && res.session) {
         setSession(res.session);
-        handleRoleLanding(res.session.userRole);
-        setFeedback({ message: `Acesso autorizado!`, type: 'success' });
+        if (res.isStaff) {
+          setViewMode('admin');
+          setCurrentRoute('dashboard');
+        } else {
+          setFeedback({ message: `Bem-vindo à loja!`, type: 'success' });
+          setViewMode('store');
+          setCurrentRoute('public-home');
+        }
         setTimeout(() => setFeedback(null), 3000);
-      } else if (res.isUnregistered) {
-        // Redirecionamento automático se não cadastrado
-        setFeedback({ message: `E-mail não cadastrado como Staff. Entrando na loja...`, type: 'warning' });
-        setViewMode('store');
-        setCurrentRoute('public-home');
-        setTimeout(() => setFeedback(null), 4000);
       } else {
-        setAuthError(res.error || 'Falha na autenticação');
+        setAuthError(res.error || 'Acesso negado');
       }
     } finally {
       setIsLoggingIn(false);
@@ -211,7 +215,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Se estiver tentando entrar no modo admin mas não estiver logado como STAFF
   if (viewMode === 'admin' && !session) {
     return (
       <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
@@ -221,17 +224,15 @@ const App: React.FC = () => {
             <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Console Master</h1>
             {authError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase border border-red-100">{authError}</div>}
             <form onSubmit={handleLogin} className="space-y-4 pt-4">
-               <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="E-mail Corporativo" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
-               <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="Senha de Acesso" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
-               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
-                 {isLoggingIn ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : 'Entrar no Hub'}
-               </button>
+               <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="E-mail" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
+               <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="Senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
+               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all shadow-xl active:scale-95">Entrar no Hub</button>
             </form>
             <button onClick={handleGoogleLogin} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95">
               <img src="https://img.icons8.com/color/48/google-logo.png" className="w-6 h-6" alt="" />
               Google Workspace
             </button>
-            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline">Voltar para a Vitrine (Comprar)</button>
+            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline">Voltar para a Vitrine</button>
           </div>
         </div>
       </div>
@@ -242,9 +243,7 @@ const App: React.FC = () => {
     <div className="flex h-screen bg-slate-50 overflow-hidden relative">
       {feedback && (
         <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-10">
-          <div className={`px-12 py-5 border rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest ${
-            feedback.type === 'warning' ? 'bg-amber-500 border-amber-400 text-white' : 'bg-slate-900 border-emerald-500 text-white'
-          }`}>
+          <div className="px-12 py-5 bg-slate-900 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest">
             {feedback.message}
           </div>
         </div>
@@ -260,8 +259,9 @@ const App: React.FC = () => {
               {currentRoute === 'store-offers' && <PublicCatalog onBuy={() => handleNavigate('checkout')} showOnlyOffers />}
               {currentRoute === 'checkout' && <CheckoutPage product={null} onComplete={() => handleNavigate('public-home')} />}
               {currentRoute === 'public-contact' && <PublicContact />}
+              {currentRoute === 'affiliate-register' && <PublicAffiliateRegister onComplete={() => handleNavigate('public-home')} />}
            </main>
-           <PublicFooter />
+           <PublicFooter onNavigate={handleNavigate} />
            <AICoach isOpen={isCoachOpen} onClose={() => setIsCoachOpen(false)} />
            <LGPDBanner />
            <button onClick={() => setIsCoachOpen(true)} className="fixed bottom-8 right-8 w-16 h-16 bg-emerald-500 text-white rounded-full shadow-2xl flex items-center justify-center text-3xl hover:scale-110 active:scale-95 transition-all z-[90] animate-bounce">🤖</button>
@@ -296,9 +296,10 @@ const App: React.FC = () => {
                 {currentRoute === 'mkp-prods' && <MarketplaceProducts />}
                 {currentRoute === 'mkp-orders' && <MarketplaceOrders />}
                 {currentRoute === 'mkp-fin' && <MarketplaceFinance />}
-                {currentRoute === 'log-carriers' && <LogisticsCarriers />}
-                {currentRoute === 'log-rates' && <LogisticsRates />}
-                {currentRoute === 'log-deliveries' && <LogisticsDeliveries />}
+                {currentRoute === 'aff-overview' && <AffiliatesOverview />}
+                {currentRoute === 'aff-commissions' && <AffiliatesCommissions />}
+                {currentRoute === 'aff-links' && <AffiliatesLinks />}
+                {currentRoute === 'aff-reports' && <AffiliatesReports />}
                 {currentRoute === 'lgpd-consents' && <LGPDConsentPage />}
                 {currentRoute === 'lgpd-mydata' && <LGPDUserDataPage currentUser={session!} />}
                 {currentRoute === 'lgpd-logs' && <LGPDLogsPage />}

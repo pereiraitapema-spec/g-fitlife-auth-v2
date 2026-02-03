@@ -93,7 +93,6 @@ export interface SystemSettings {
   dominio: string;
   moeda: 'BRL' | 'USD' | 'EUR';
   timezone: string;
-  // Campos legados mantidos para compatibilidade
   companyName: string;
   storeName: string;
   adminEmail: string;
@@ -420,7 +419,6 @@ export interface AILogEntry {
   timestamp: string;
 }
 
-// Novos Tipos Módulo AJUDA
 export interface HelpTopic {
   id: string;
   title: string;
