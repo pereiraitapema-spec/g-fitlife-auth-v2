@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { storeService } from '../services/storeService';
 import { HelpTopic } from '../types';
@@ -91,7 +90,7 @@ const HelpCoreDetail: React.FC = () => {
                 <div>
                    <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Correção de Limite de Cadastro</p>
                    <p className="font-mono text-[11px] leading-relaxed text-emerald-500/80 italic">
-                    "CORREÇÃO — CORE > USUÁRIOS (LIMITE DE CRIAÇÃO). Objetivo: Remover trava de 2 registros. Regra: Aceitar usuários ilimitados via append no localStorage['core_users']. Feedback visual (popup) obrigatório em todas as ações de sucesso/erro. Lista com scroll H/V garantido."
+                    {"\"CORREÇÃO — CORE > USUÁRIOS (LIMITE DE CRIAÇÃO). Objetivo: Remover trava de 2 registros. Regra: Aceitar usuários ilimitados via append no localStorage['core_users']. Feedback visual (popup) obrigatório em todas as ações de sucesso/erro. Lista com scroll H/V garantido.\""}
                    </p>
                 </div>
              </div>
