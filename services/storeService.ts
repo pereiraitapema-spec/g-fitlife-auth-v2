@@ -11,62 +11,44 @@ const KEY_SESSION = 'auth_session';
 export const storeService = {
   async initializeSystem(): Promise<void> {
     try {
-      // 1. Tentar carregar configurações (Remoto -> Local -> Default)
-      let remoteConfig = null;
+      let config = null;
       if (supabase) {
         const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').single();
-        remoteConfig = data;
+        config = data;
       }
 
-      if (remoteConfig) {
-        await dbStore.put('config', remoteConfig);
+      if (config) {
+        await dbStore.put('config', config);
       } else {
-        const localConfig = await dbStore.getByKey<any>('config', 'geral');
-        if (!localConfig) {
-          const defaultConfig = {
-            key: 'geral',
-            nomeLoja: 'G-FitLife Enterprise',
+        const local = await dbStore.getByKey<any>('config', 'geral');
+        if (!local) {
+          const defaultConfig: SystemSettings = {
+            nomeLoja: 'G-FitLife',
             logoUrl: 'https://picsum.photos/seed/gfitlife/400/400',
-            emailContato: 'enterprise@gfitlife.io',
+            emailContato: 'contato@gfitlife.io',
+            telefone: '(11) 4004-GFIT',
+            whatsapp: '(11) 99999-0000',
+            dominio: 'gfitlife.io',
             moeda: 'BRL',
-            environment: 'production',
-            storeName: 'G-FitLife Store',
+            timezone: 'America/Sao_Paulo',
+            companyName: 'G-FitLife Enterprise',
+            storeName: 'G-FitLife Oficial',
             adminEmail: 'admin@gfitlife.io',
-            companyName: 'G-FitLife Inc.',
             systemStatus: 'online',
-            language: 'pt-BR',
-            currency: 'BRL',
+            environment: 'production',
             privacyPolicy: 'Política LGPD G-FitLife...',
             termsOfUse: 'Termos de uso corporativos...',
-            timezone: 'America/Sao_Paulo',
-            dominio: 'gfitlife.io',
-            telefone: '(11) 4004-GFIT',
-            whatsapp: '(11) 99999-0000'
+            pwaInstalledCount: 0,
+            pwaVersion: '4.0.0',
+            pushNotificationsActive: true,
+            language: 'pt-BR',
+            currency: 'BRL'
           };
-          await dbStore.put('config', defaultConfig);
+          // @ts-ignore
+          await dbStore.put('config', { ...defaultConfig, key: 'geral' });
         }
       }
 
-      // 2. Seed de Dados Básicos no LocalDB
-      const checkAndSeed = async (storeName: string, defaultData: any[]) => {
-        const existing = await dbStore.getAll(storeName);
-        if (existing.length === 0) {
-          for (const item of defaultData) {
-            await dbStore.put(storeName, item);
-          }
-        }
-      };
-
-      await checkAndSeed('departments', [
-        { id: 'dept-1', name: 'Suplementação', status: 'active' },
-        { id: 'dept-2', name: 'Equipamentos', status: 'active' }
-      ]);
-
-      await checkAndSeed('ai_predictions', [
-        { id: 'pred-1', period: 'Jul/2024', projectedSales: 125000, confidence: 94, insights: ['Alta demanda corporativa'] }
-      ]);
-
-      // 3. Sincronização de Usuários (Se Supabase ativo)
       if (supabase) {
         const { data: remoteUsers } = await supabase.from('users_profile').select('*');
         if (remoteUsers) {
@@ -76,12 +58,11 @@ export const storeService = {
         }
       }
     } catch (err) {
-      console.warn("Sincronização limitada (Modo local ativo):", err);
+      console.warn("Inicialização em modo offline/demo.");
     }
   },
 
   async login(email: string, pass: string) {
-    // Tenta Supabase primeiro
     if (supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -97,8 +78,11 @@ export const storeService = {
             .single();
 
           if (profile) {
+            if (profile.status !== UserStatus.ACTIVE) {
+              return { success: false, error: 'Conta suspensa. Contate o administrador.' };
+            }
             const session = this.createSession(profile);
-            return { success: true, session, forcePasswordChange: profile.isDefaultPassword };
+            return { success: true, session, profile };
           }
         }
       } catch (err) {
@@ -106,17 +90,18 @@ export const storeService = {
       }
     }
     
-    // Fallback Offline/Master Local
+    // Fallback Master Local ( admin@system.local / admin123 )
     if (email === 'admin@system.local' && pass === 'admin123') {
       const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email, role: UserRole.ADMIN_MASTER, status: UserStatus.ACTIVE };
-      return { success: true, session: this.createSession(fallbackAdmin) };
+      const session = this.createSession(fallbackAdmin);
+      return { success: true, session, profile: fallbackAdmin };
     }
     
-    return { success: false, error: 'Credenciais inválidas ou serviço indisponível.' };
+    return { success: false, error: 'Credenciais incorretas ou falha na conexão.' };
   },
 
   async loginWithGoogle() {
-    if (!supabase) return { success: false, error: 'Serviço de autenticação remota não configurado.' };
+    if (!supabase) return { success: false, error: 'Serviço de autenticação offline.' };
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin }
@@ -128,61 +113,35 @@ export const storeService = {
   async getProfileAfterLogin(userId: string) {
      if (!supabase) return null;
      const { data: profile } = await supabase.from('users_profile').select('*').eq('id', userId).single();
+     
+     if (!profile) {
+        const { data: authUser } = await supabase.auth.getUser();
+        if (authUser.user) {
+           const newProfile = {
+             id: authUser.user.id,
+             name: authUser.user.user_metadata.full_name || 'Membro G-FitLife',
+             email: authUser.user.email,
+             role: UserRole.CUSTOMER,
+             status: UserStatus.ACTIVE,
+             created_at: new Date().toISOString()
+           };
+           await supabase.from('users_profile').insert(newProfile);
+           return newProfile;
+        }
+     }
      return profile;
   },
 
-  async createAdminUser(userData: any) {
-    const response = await fetch('/api/admin/create-user', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData)
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Falha ao criar usuário');
-    window.dispatchEvent(new Event('usersChanged'));
-    return result;
+  async getSettings(): Promise<SystemSettings> {
+    const data = await dbStore.getByKey<any>('config', 'geral');
+    return data as SystemSettings;
   },
 
-  async deleteAdminUser(userId: string) {
-    const response = await fetch('/api/admin/delete-user', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId })
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Falha ao excluir');
-    window.dispatchEvent(new Event('usersChanged'));
-    return result;
-  },
-
-  async updateAdminCredentials(userId: string, email: string, pass: string): Promise<boolean> {
-    if (!supabase) return false;
-    try {
-      const { error: authError } = await supabase.auth.updateUser({ email: email.trim().toLowerCase(), password: pass });
-      if (authError) throw authError;
-      const { error: profileError } = await supabase.from('users_profile').update({ email: email.trim().toLowerCase() }).eq('id', userId);
-      if (profileError) throw profileError;
-      return true;
-    } catch (err) {
-      console.error("Erro ao atualizar credenciais:", err);
-      return false;
-    }
-  },
-
-  async saveUser(u: AppUser): Promise<void> {
-    await dbStore.put('users', u);
+  async saveSettings(settings: SystemSettings): Promise<void> {
+    const dataToSave = { ...settings, key: 'geral' };
+    await dbStore.put('config', dataToSave);
     if (supabase) {
-      await supabase.from('users_profile').upsert({
-        id: u.id, name: u.name, email: u.email, role: u.role, status: u.status, updated_at: new Date().toISOString()
-      });
-    }
-    window.dispatchEvent(new Event('usersChanged'));
-  },
-
-  async saveSettings(s: SystemSettings): Promise<void> {
-    await dbStore.put('config', { ...s, key: 'geral' });
-    if (supabase) {
-      await supabase.from('core_settings').upsert({ ...s, key: 'geral' });
+      await supabase.from('core_settings').upsert(dataToSave);
     }
     window.dispatchEvent(new Event('systemSettingsChanged'));
   },
@@ -198,6 +157,7 @@ export const storeService = {
       expiresAt: new Date(Date.now() + 86400000).toISOString()
     };
     sessionStorage.setItem(KEY_SESSION, JSON.stringify(s));
+    window.dispatchEvent(new Event('sessionUpdated'));
     return s;
   },
 
@@ -207,23 +167,10 @@ export const storeService = {
     return JSON.parse(saved);
   },
 
-  updateSessionRole(role: UserRole) {
-    const session = this.getActiveSession();
-    if (session) {
-      session.userRole = role;
-      sessionStorage.setItem(KEY_SESSION, JSON.stringify(session));
-      window.dispatchEvent(new Event('sessionUpdated'));
-    }
-  },
-
   logout(): void {
     sessionStorage.removeItem(KEY_SESSION);
     if (supabase) supabase.auth.signOut();
-  },
-
-  async getSettings(): Promise<SystemSettings> {
-    const data = await dbStore.getByKey<any>('config', 'geral');
-    return data as SystemSettings;
+    window.dispatchEvent(new Event('sessionUpdated'));
   },
 
   async getUsers(): Promise<AppUser[]> {
@@ -232,6 +179,54 @@ export const storeService = {
       if (remoteUsers) return remoteUsers as AppUser[];
     }
     return await dbStore.getAll<AppUser>('users');
+  },
+
+  async saveUser(user: AppUser): Promise<void> {
+    await dbStore.put('users', user);
+    if (supabase) {
+      await supabase.from('users_profile').upsert(user);
+    }
+    window.dispatchEvent(new Event('usersChanged'));
+  },
+
+  async createAdminUser(adminData: any): Promise<void> {
+    const response = await fetch('/api/admin/create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(adminData)
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Falha ao criar administrador');
+    }
+    window.dispatchEvent(new Event('usersChanged'));
+  },
+
+  async deleteAdminUser(id: string): Promise<boolean> {
+    const response = await fetch('/api/admin/delete-user', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: id })
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Falha ao excluir administrador');
+    }
+    window.dispatchEvent(new Event('usersChanged'));
+    return true;
+  },
+
+  async updateAdminCredentials(userId: string, email: string, pass: string): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.auth.updateUser({ email, password: pass });
+    if (error) {
+      console.error("Erro ao atualizar credenciais:", error);
+      return false;
+    }
+    const allUsers = await this.getUsers();
+    const user = allUsers.find(u => u.id === userId);
+    if (user) await this.saveUser({ ...user, email: email });
+    return true;
   },
 
   async getProducts(): Promise<Product[]> { return await dbStore.getAll<Product>('products'); },
@@ -253,7 +248,7 @@ export const storeService = {
   },
 
   async uploadFile(file: File): Promise<string> {
-    if (!supabase) return URL.createObjectURL(file); // Fallback local preview
+    if (!supabase) return URL.createObjectURL(file);
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random()}.${fileExt}`;
     const filePath = `public/${fileName}`;
@@ -270,8 +265,6 @@ export const storeService = {
 
   async deleteUser(id: string): Promise<boolean> {
     if (supabase) {
-      const { data: user } = await supabase.from('users_profile').select('*').eq('id', id).single();
-      if (user && user.email === 'admin@system.local') return false;
       await supabase.from('users_profile').delete().eq('id', id);
     }
     window.dispatchEvent(new Event('usersChanged'));

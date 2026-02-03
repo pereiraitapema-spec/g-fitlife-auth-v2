@@ -22,7 +22,7 @@ import PublicContact from './pages/PublicContact';
 import AICoach from './components/AICoach';
 import LGPDBanner from './components/LGPDBanner';
 
-// Imports de Novos Módulos
+// Modulos Adicionais
 import MarketingBanners from './pages/MarketingBanners';
 import MarketingRemarketing from './pages/MarketingRemarketing';
 import MarketingChatIA from './pages/MarketingChatIA';
@@ -87,107 +87,74 @@ export type Route =
 
 const App: React.FC = () => {
   const [isSystemReady, setIsSystemReady] = useState(false);
-  const [initError, setInitError] = useState<string | null>(null);
   const [session, setSession] = useState<UserSession | null>(null);
   const [currentRoute, setCurrentRoute] = useState<Route>('public-home');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [viewMode, setViewMode] = useState<'store' | 'admin'>('store');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
   const [isCoachOpen, setIsCoachOpen] = useState(false);
   const [cart, setCart] = useState<Product[]>([]);
   const [feedback, setFeedback] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
-  
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPass, setLoginPass] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+
+  // Lógica OBRIGATÓRIA: Landings baseadas em Role
+  const handleRoleLanding = (role: UserRole) => {
+    // Definimos quem são os colaboradores administrativos
+    const isStaff = role === UserRole.ADMIN_MASTER || 
+                    role === UserRole.ADMIN_OPERATIONAL || 
+                    role === UserRole.FINANCE || 
+                    role === UserRole.MARKETING;
+
+    if (isStaff) {
+      setViewMode('admin');
+      setCurrentRoute('dashboard');
+    } else {
+      setViewMode('store');
+      setCurrentRoute('public-home');
+    }
+  };
 
   useEffect(() => {
-    const bootstrap = async () => {
-      try {
-        console.log('[BOOTSTRAP] Iniciando G-FitLife Hub...');
-        await storeService.initializeSystem();
-        
-        let sbSession = null;
-        if (supabase) {
-          try {
-            const { data } = await supabase.auth.getSession();
-            sbSession = data.session;
-          } catch (e) {
-            console.warn('[BOOTSTRAP] Supabase Auth indisponível:', e);
-          }
-        }
-        
-        if (sbSession) {
-          // ATUALIZADO: Busca perfil na users_profile
-          const profile = await storeService.getProfileAfterLogin(sbSession.user.id);
-          
+    const init = async () => {
+      await storeService.initializeSystem();
+      
+      let currentSession = null;
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          const profile = await storeService.getProfileAfterLogin(data.session.user.id);
           if (profile) {
-            if (profile.status !== UserStatus.ACTIVE) {
-               setAuthError("Sua conta está suspensa ou inativa. Contate o suporte.");
-               if (supabase) await supabase.auth.signOut();
-               setIsSystemReady(true);
-               return;
+            if (profile.status === UserStatus.INACTIVE) {
+              await storeService.logout();
+              setIsSystemReady(true);
+              return;
             }
-
-            const newSess = storeService.createSession(profile);
-            setSession(newSess);
-            
-            const canAccessAdmin = profile.role === UserRole.ADMIN_MASTER || profile.role === UserRole.ADMIN_OPERATIONAL;
-            
-            if (canAccessAdmin) {
-              setViewMode('admin');
-              setCurrentRoute('dashboard');
-            } else {
-              setViewMode('store');
-              setCurrentRoute('public-home');
-            }
-          } else {
-             setAuthError("Perfil não autorizado no banco de dados.");
-             if (supabase) await supabase.auth.signOut();
-          }
-        } else {
-          const active = storeService.getActiveSession();
-          if (active) {
-            setSession(active);
-            const canAccessAdmin = active.userRole === UserRole.ADMIN_MASTER || active.userRole === UserRole.ADMIN_OPERATIONAL;
-            if (canAccessAdmin) {
-              setViewMode('admin');
-              setCurrentRoute('dashboard');
-            } else {
-              setViewMode('store');
-              setCurrentRoute('public-home');
-            }
-          } else {
-            setViewMode('store');
-            setCurrentRoute('public-home');
+            currentSession = storeService.createSession(profile);
+            handleRoleLanding(profile.role);
           }
         }
-        setIsSystemReady(true);
-      } catch (err) {
-        console.error('[BOOTSTRAP] Erro fatal:', err);
-        setInitError("Falha na inicialização do sistema. Verifique os logs.");
-        setIsSystemReady(true);
       }
-    };
-    bootstrap();
 
-    const handleSessionUpdate = () => {
-      setSession(storeService.getActiveSession());
+      if (!currentSession) {
+        const cached = storeService.getActiveSession();
+        if (cached) {
+          setSession(cached);
+          handleRoleLanding(cached.userRole);
+        }
+      } else {
+        setSession(currentSession);
+      }
+      
+      setIsSystemReady(true);
     };
-    window.addEventListener('sessionUpdated', handleSessionUpdate);
-    const handleResize = () => setIsSidebarOpen(window.innerWidth > 1024);
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('sessionUpdated', handleSessionUpdate);
-    };
+    init();
+
+    const handleSessionChange = () => setSession(storeService.getActiveSession());
+    window.addEventListener('sessionUpdated', handleSessionChange);
+    return () => window.removeEventListener('sessionUpdated', handleSessionChange);
   }, []);
-
-  const showFeedback = (msg: string, type: 'success' | 'error' | 'warning' = 'success') => {
-    setFeedback({ message: msg, type });
-    setTimeout(() => setFeedback(null), 4000);
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,25 +162,14 @@ const App: React.FC = () => {
     setIsLoggingIn(true);
     setAuthError(null);
     try {
-      const result = await storeService.login(loginEmail, loginPass);
-      if (result.success && result.session) {
-        setSession(result.session);
-        
-        const role = result.session.userRole;
-        const isAdmin = role === UserRole.ADMIN_MASTER || role === UserRole.ADMIN_OPERATIONAL;
-        
-        if (isAdmin) {
-          setViewMode('admin');
-          setCurrentRoute('dashboard');
-          showFeedback("Acesso Administrativo Liberado");
-        } else {
-          setViewMode('store');
-          setCurrentRoute('public-home');
-          showFeedback("Bem-vindo à G-FitLife!");
-        }
+      const res = await storeService.login(loginEmail, loginPass);
+      if (res.success && res.session) {
+        setSession(res.session);
+        handleRoleLanding(res.session.userRole);
+        setFeedback({ message: `Bem-vindo de volta!`, type: 'success' });
+        setTimeout(() => setFeedback(null), 3000);
       } else {
-        setAuthError(result.error || 'Acesso negado');
-        showFeedback(result.error || "Erro de Auth", "error");
+        setAuthError(res.error || 'Acesso negado');
       }
     } finally {
       setIsLoggingIn(false);
@@ -221,18 +177,8 @@ const App: React.FC = () => {
   };
 
   const handleGoogleLogin = async () => {
-    setIsLoggingIn(true);
-    setAuthError(null);
-    try {
-      const res = await storeService.loginWithGoogle();
-      if (!res.success) {
-        setAuthError(res.error || "Falha no Google Auth");
-        showFeedback(res.error || "Erro de Auth", "error");
-        setIsLoggingIn(false);
-      }
-    } catch (e) {
-      setIsLoggingIn(false);
-    }
+    const res = await storeService.loginWithGoogle();
+    if (!res.success) setAuthError(res.error || 'Falha no Google Auth');
   };
 
   const handleLogout = () => {
@@ -240,146 +186,61 @@ const App: React.FC = () => {
     setSession(null);
     setViewMode('store');
     setCurrentRoute('public-home');
-    showFeedback("Sessão encerrada.");
   };
 
   const handleNavigate = (route: Route) => {
-    if (window.innerWidth <= 1024) setIsSidebarOpen(false);
     setCurrentRoute(route);
+    if (window.innerWidth <= 1024) setIsSidebarOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const renderAdminContent = () => {
-    if (!session) return null;
-
-    const role = session.userRole;
-    const isAdmin = role === UserRole.ADMIN_MASTER || role === UserRole.ADMIN_OPERATIONAL;
-    
-    if (!isAdmin) {
-      return (
-        <div className="h-[60vh] flex flex-col items-center justify-center text-center p-10 space-y-6 animate-in zoom-in-95">
-          <div className="w-24 h-24 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-5xl">🛡️</div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Acesso Restrito</h2>
-          <p className="text-slate-500 max-w-sm font-medium">Você não possui privilégios de administrador para visualizar este console.</p>
-          <button onClick={() => setViewMode('store')} className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-500 transition-all">Voltar para a Loja</button>
-        </div>
-      );
-    }
-
-    switch (currentRoute) {
-      case 'dashboard': return <Dashboard />;
-      case 'core-settings': return <CoreSettings />;
-      case 'core-users': return <CoreUsers />;
-      case 'core-roles': return <CoreRoles />;
-      case 'products-catalog': return <ProductsCatalog />;
-      case 'orders': return <OrdersPage />;
-      case 'departments': return <Departments />;
-      case 'categories': return <CategoriesPage />;
-      case 'coupons': return <CouponsPage />;
-      case 'mkt-banners': return <MarketingBanners />;
-      case 'mkt-remkt': return <MarketingRemarketing />;
-      case 'mkt-chat': return <MarketingChatIA />;
-      case 'seo-onpage': return <SEOOnPage />;
-      case 'seo-tech': return <SEOTechnical />;
-      case 'seo-perf': return <SEOPerformance />;
-      case 'seo-audit': return <SEOMonitoring />;
-      case 'fin-gateways': return <FinancePayments />;
-      case 'fin-trans': return <FinanceTransactions />;
-      case 'fin-reports': return <FinanceReports />;
-      case 'log-carriers': return <LogisticsCarriers />;
-      case 'log-rates': return <LogisticsRates />;
-      case 'log-deliveries': return <LogisticsDeliveries />;
-      case 'mkp-sellers': return <MarketplaceSellers />;
-      case 'mkp-prods': return <MarketplaceProducts />;
-      case 'mkp-orders': return <MarketplaceOrders />;
-      case 'mkp-fin': return <MarketplaceFinance />;
-      case 'ai-recom': return <AIRecommendations />;
-      case 'ai-predict': return <AIPredictions />;
-      case 'ai-automations': return <AIAutomations />;
-      case 'ai-logs': return <AILogs />;
-      case 'sec-auth': return <SecurityAuth currentUser={session} />;
-      case 'sec-perms': return <SecurityPermissions />;
-      case 'sec-audit': return <SecurityAudit />;
-      case 'sec-logs': return <SecurityLogs />;
-      case 'infra-env': return <InfraEnvironment />;
-      case 'infra-deploy': return <InfraDeploy currentUser={session} />;
-      case 'infra-backup': return <InfraBackup />;
-      case 'infra-monitoring': return <InfraMonitoring />;
-      case 'help-overview': return <HelpOverview />;
-      case 'help-core-detail': return <HelpCoreDetail />;
-      default: return <Dashboard />;
-    }
-  };
-
-  const renderPublicContent = () => {
-    switch (currentRoute) {
-      case 'public-home': return <PublicHome onNavigate={handleNavigate} onAddToCart={p => { setCart([...cart, p]); showFeedback(`${p.name} adicionado!`); }} />;
-      case 'departments': return <PublicDepartments onNavigate={handleNavigate} />;
-      case 'store-catalog': return <PublicCatalog onBuy={p => { setSelectedProduct(p); setCurrentRoute('checkout'); }} />;
-      case 'store-offers': return <PublicCatalog onBuy={p => { setSelectedProduct(p); setCurrentRoute('checkout'); }} showOnlyOffers />;
-      case 'checkout': return <CheckoutPage product={selectedProduct} onComplete={() => handleNavigate('public-home')} />;
-      case 'public-contact': return <PublicContact />;
-      default: return <PublicHome onNavigate={handleNavigate} onAddToCart={p => { setCart([...cart, p]); showFeedback(`${p.name} adicionado!`); }} />;
-    }
   };
 
   if (!isSystemReady) {
     return (
-      <div className="h-screen bg-slate-900 flex items-center justify-center p-8 text-center">
-        <div className="space-y-8 animate-pulse">
-           <div className="w-20 h-20 bg-emerald-500 rounded-[32px] flex items-center justify-center text-white text-4xl font-black mx-auto">G</div>
-           <p className="text-slate-500 font-black uppercase tracking-widest text-[10px]">Iniciando Hub Enterprise...</p>
-        </div>
+      <div className="h-screen bg-slate-900 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
-  if (initError) {
-    return (
-      <div className="h-screen bg-slate-900 flex items-center justify-center p-8 text-center">
-        <div className="space-y-6">
-          <h1 className="text-2xl font-black text-white uppercase tracking-tighter">Erro de Inicialização</h1>
-          <p className="text-slate-400 max-w-sm mx-auto">{initError}</p>
-          <button onClick={() => window.location.reload()} className="px-10 py-5 bg-emerald-500 text-white rounded-3xl font-black uppercase text-xs">Recarregar Sistema</button>
-        </div>
-      </div>
-    );
-  }
-
+  // Se o modo admin foi solicitado (via botão ou automático) mas não há sessão ativa
   if (viewMode === 'admin' && !session) {
     return (
-      <div className="h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-slate-900 opacity-50"></div>
-        <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl relative z-10 animate-in zoom-in-95">
-           <button onClick={() => setViewMode('store')} className="absolute top-8 right-8 text-slate-300 font-bold hover:text-slate-900 transition-all">✕</button>
-           <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-white text-3xl font-black mx-auto mb-8 shadow-xl">G</div>
-           <h1 className="text-3xl font-black text-center text-slate-900 mb-10 tracking-tight leading-none uppercase">Console Enterprise</h1>
-           
-           {authError && <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-bold text-center border border-red-100 animate-bounce">{authError}</div>}
-           
-           <form onSubmit={handleLogin} className="space-y-4">
-             <input disabled={isLoggingIn} type="text" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full bg-slate-50 rounded-3xl p-6 outline-none font-bold border-2 border-transparent focus:border-emerald-500 transition-all shadow-inner" placeholder="E-mail Corporativo" required />
-             <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full bg-slate-50 rounded-3xl p-6 outline-none font-bold border-2 border-transparent focus:border-emerald-500 transition-all shadow-inner" placeholder="Senha" required />
-             <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[30px] font-black text-lg hover:bg-emerald-500 transition-all active:scale-95 shadow-xl">{isLoggingIn ? 'AUTENTICANDO...' : 'ACESSAR AGORA'}</button>
-           </form>
+      <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl animate-in zoom-in-95 duration-700">
+          <div className="text-center space-y-6">
+            <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl shadow-emerald-500/20">G</div>
+            <div>
+              <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Console Master</h1>
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Segurança G-FitLife</p>
+            </div>
+            
+            {authError && (
+              <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase border border-red-100 animate-pulse">
+                {authError}
+              </div>
+            )}
+            
+            <form onSubmit={handleLogin} className="space-y-4 pt-4">
+               <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="E-mail" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10 transition-all" required />
+               <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="Senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10 transition-all" required />
+               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-2xl shadow-emerald-500/10 active:scale-95">
+                 {isLoggingIn ? 'Autenticando...' : 'Entrar no Hub'}
+               </button>
+            </form>
 
-           <div className="my-8 flex items-center gap-4">
+            <div className="py-4 flex items-center gap-4">
               <div className="flex-1 h-px bg-slate-100"></div>
-              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Ou acessar com</span>
+              <span className="text-[10px] font-black text-slate-300">OPÇÃO SSO</span>
               <div className="flex-1 h-px bg-slate-100"></div>
-           </div>
+            </div>
 
-           <button 
-             type="button"
-             disabled={isLoggingIn}
-             onClick={handleGoogleLogin}
-             className="w-full py-5 bg-white border-2 border-slate-100 rounded-[30px] font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-50 transition-all shadow-sm active:scale-95 disabled:opacity-50"
-           >
-              <img src="https://img.icons8.com/color/48/google-logo.png" className="w-6 h-6" alt="Google" />
-              Entrar com Google
-           </button>
+            <button onClick={handleGoogleLogin} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95">
+              <img src="https://img.icons8.com/color/48/google-logo.png" className="w-6 h-6" alt="" />
+              Google Workspace
+            </button>
 
-           <p className="mt-8 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest leading-relaxed">Acesso restrito a operadores <br/> autorizados G-FitLife Enterprise.</p>
+            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline decoration-2 underline-offset-4 transition-colors">Voltar para a Vitrine</button>
+          </div>
         </div>
       </div>
     );
@@ -388,21 +249,30 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden relative">
       {feedback && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-10">
-          <div className={`px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-3 border ${
-            feedback.type === 'error' ? 'bg-red-500 border-red-400 text-white' : 
-            feedback.type === 'warning' ? 'bg-amber-500 border-amber-400 text-white' :
-            'bg-slate-900 border-emerald-500 text-white'
-          }`}>
-             <span className="font-black text-xs uppercase tracking-widest">{feedback.message}</span>
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-10">
+          <div className="px-12 py-5 bg-slate-900 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest">
+            {feedback.message}
           </div>
         </div>
       )}
 
       {viewMode === 'store' ? (
-        <div className="min-h-screen bg-white flex flex-col relative w-full overflow-y-auto overflow-x-hidden custom-scrollbar">
-           <PublicHeader onNavigate={handleNavigate} cartCount={cart.length} onOpenCoach={() => setIsCoachOpen(true)} onSwitchMode={() => setViewMode('admin')} />
-           <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-12">{renderPublicContent()}</main>
+        <div className="min-h-screen bg-white flex flex-col relative w-full overflow-y-auto custom-scrollbar">
+           <PublicHeader 
+             onNavigate={handleNavigate} 
+             cartCount={cart.length} 
+             onOpenCoach={() => setIsCoachOpen(true)} 
+             onSwitchMode={() => setViewMode('admin')} 
+             user={session}
+           />
+           <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-12">
+              {currentRoute === 'public-home' && <PublicHome onNavigate={handleNavigate} onAddToCart={p => setCart([...cart, p])} />}
+              {currentRoute === 'departments' && <PublicDepartments onNavigate={handleNavigate} />}
+              {currentRoute === 'store-catalog' && <PublicCatalog onBuy={() => handleNavigate('checkout')} />}
+              {currentRoute === 'store-offers' && <PublicCatalog onBuy={() => handleNavigate('checkout')} showOnlyOffers />}
+              {currentRoute === 'checkout' && <CheckoutPage product={null} onComplete={() => handleNavigate('public-home')} />}
+              {currentRoute === 'public-contact' && <PublicContact />}
+           </main>
            <PublicFooter />
            <AICoach isOpen={isCoachOpen} onClose={() => setIsCoachOpen(false)} />
            <LGPDBanner />
@@ -410,12 +280,22 @@ const App: React.FC = () => {
         </div>
       ) : (
         <>
-          {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[45] lg:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
           <Sidebar isOpen={isSidebarOpen} currentRoute={currentRoute} onNavigate={handleNavigate} userRole={session!.userRole} onLogout={handleLogout} onSwitchToStore={() => setViewMode('store')} />
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
             <HeaderSimple onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} title={currentRoute.replace('-', ' ').toUpperCase()} user={session!} />
             <main className="flex-1 overflow-y-auto p-4 md:p-10 custom-scrollbar bg-slate-50">
-              <div className="max-w-7xl mx-auto pb-24 md:pb-20">{renderAdminContent()}</div>
+              <div className="max-w-7xl mx-auto pb-24 md:pb-20">
+                {currentRoute === 'dashboard' && <Dashboard />}
+                {currentRoute === 'core-settings' && <CoreSettings />}
+                {currentRoute === 'core-users' && <CoreUsers />}
+                {currentRoute === 'core-roles' && <CoreRoles />}
+                {currentRoute === 'orders' && <OrdersPage />}
+                {currentRoute === 'products-catalog' && <ProductsCatalog />}
+                {currentRoute === 'departments' && <Departments />}
+                {currentRoute === 'categories' && <CategoriesPage />}
+                {currentRoute === 'coupons' && <CouponsPage />}
+                {/* Outros módulos administrativos seguindo o mesmo padrão */}
+              </div>
             </main>
           </div>
           <LGPDBanner />
