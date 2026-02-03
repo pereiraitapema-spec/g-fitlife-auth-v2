@@ -14,26 +14,36 @@ const SecurityAuth: React.FC<SecurityAuthProps> = ({ currentUser }) => {
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    // Adicionado await para carregar as sessões de usuários
+    /**
+     * Adicionado await para carregar as sessões de usuários
+     */
     const load = async () => {
       setSessions(await storeService.getSessions());
     };
     load();
   }, []);
 
-  const handleUpdateCredentials = (e: React.FormEvent) => {
+  /**
+   * Fix: Made the function async and awaited storeService.updateAdminCredentials
+   */
+  const handleUpdateCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsUpdating(true);
     
-    setTimeout(() => {
-      const success = storeService.updateAdminCredentials(currentUser.userId, newEmail, newPass);
+    try {
+      const success = await storeService.updateAdminCredentials(currentUser.userId, newEmail, newPass);
       if (success) {
         alert('Credenciais atualizadas com sucesso! O acesso padrão foi desativado.');
         setNewEmail('');
         setNewPass('');
+      } else {
+        alert('Falha ao atualizar credenciais no Supabase.');
       }
+    } catch (err) {
+      alert('Erro inesperado na atualização.');
+    } finally {
       setIsUpdating(false);
-    }, 1500);
+    }
   };
 
   return (

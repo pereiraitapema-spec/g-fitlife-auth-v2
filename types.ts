@@ -1,4 +1,3 @@
-
 export interface Product {
   id: string;
   name: string;
@@ -396,6 +395,7 @@ export interface AIRecommendation {
 }
 
 export interface AIPrediction {
+  id: string;
   period: string;
   projectedSales: number;
   confidence: number;

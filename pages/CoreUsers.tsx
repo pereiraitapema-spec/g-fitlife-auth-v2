@@ -29,7 +29,7 @@ const CoreUsers: React.FC = () => {
       const data = await storeService.getUsers();
       setUsers([...data]);
     } catch (err) {
-      showFeedback("Falha ao sincronizar usuários", "error");
+      showFeedback("Falha na sincronização", "error");
     }
   };
 
@@ -51,7 +51,7 @@ const CoreUsers: React.FC = () => {
 
     try {
       await storeService.createAdminUser(adminFormData);
-      showFeedback("Novo administrador criado no sistema!");
+      showFeedback("Administrador criado no Supabase!");
       setIsAdminModalOpen(false);
       setAdminFormData({ name: '', email: '', password: '', role: UserRole.ADMIN_MASTER });
       await loadData();
@@ -68,7 +68,6 @@ const CoreUsers: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      const isEdit = !!formData.id;
       const userData: AppUser = {
         id: formData.id || 'u-' + Date.now(),
         name: formData.name || '',
@@ -83,7 +82,7 @@ const CoreUsers: React.FC = () => {
       await storeService.saveUser(userData);
       await loadData(); 
       setIsModalOpen(false);
-      showFeedback(isEdit ? "Alteração salva no Supabase!" : "Usuário criado!");
+      showFeedback("Perfil atualizado no banco.");
     } catch (error) {
       showFeedback("Erro ao salvar: " + error, "error");
     } finally {
@@ -97,7 +96,7 @@ const CoreUsers: React.FC = () => {
       try {
         const updated = { ...user, role: newRole };
         await storeService.saveUser(updated);
-        showFeedback("Cargo atualizado!");
+        showFeedback("Privilégios atualizados!");
       } catch (err) {
         showFeedback("Erro ao trocar cargo", "error");
       }
@@ -110,7 +109,7 @@ const CoreUsers: React.FC = () => {
       const updatedStatus = u.status === UserStatus.ACTIVE ? UserStatus.INACTIVE : UserStatus.ACTIVE;
       await storeService.updateUserStatus(id, updatedStatus);
       await loadData();
-      showFeedback("Status atualizado!");
+      showFeedback("Status alterado.");
     }
   };
 
@@ -118,14 +117,14 @@ const CoreUsers: React.FC = () => {
     if (userToDelete) {
       const u = users.find(x => x.id === userToDelete);
       if (u?.email === 'admin@system.local') {
-         showFeedback("Impossível deletar o Core Master", "error");
+         showFeedback("Não é permitido excluir o Core Master", "error");
          setIsConfirmDeleteOpen(false);
          return;
       }
 
       try {
         await storeService.deleteAdminUser(userToDelete);
-        showFeedback("Usuário removido totalmente!");
+        showFeedback("Usuário excluído do Auth/DB!");
         await loadData();
       } catch (err) {
         showFeedback(err.message, "error");
@@ -135,7 +134,7 @@ const CoreUsers: React.FC = () => {
     }
   };
 
-  const getRoleLabel = (roleId: string) => roles.find(r => r.id === roleId)?.label || 'Usuário Final';
+  const getRoleLabel = (roleId: string) => roles.find(r => r.id === roleId)?.label || 'Visitante';
 
   return (
     <div className="animate-in fade-in duration-700 pb-20 space-y-10 min-h-screen">
@@ -153,10 +152,10 @@ const CoreUsers: React.FC = () => {
       {isConfirmDeleteOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md">
           <div className="bg-white rounded-[50px] shadow-2xl p-12 text-center max-w-sm w-full">
-            <h3 className="text-2xl font-black mb-6">Remover Acesso?</h3>
-            <p className="text-slate-500 mb-10 text-sm leading-relaxed">Esta ação excluirá o usuário do Auth e do Database permanentemente.</p>
+            <h3 className="text-2xl font-black mb-6 uppercase tracking-tight">Remover Acesso?</h3>
+            <p className="text-slate-500 mb-10 text-sm leading-relaxed">Esta ação é irreversível no Supabase Auth e Banco de Dados.</p>
             <div className="flex gap-4">
-              <button onClick={handleDelete} className="flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase">EXCLUIR</button>
+              <button onClick={handleDelete} className="flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase shadow-xl shadow-red-500/20 active:scale-95 transition-all">EXCLUIR</button>
               <button onClick={() => setIsConfirmDeleteOpen(false)} className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-xs uppercase text-slate-400">CANCELAR</button>
             </div>
           </div>
@@ -165,8 +164,8 @@ const CoreUsers: React.FC = () => {
 
       <div className="flex flex-col md:flex-row justify-between items-end gap-6 px-4">
         <div>
-          <h2 className="text-4xl font-black text-slate-900 uppercase">Colaboradores</h2>
-          <p className="text-slate-500 text-lg">Ambiente seguro com Auditoria Master.</p>
+          <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">Colaboradores</h2>
+          <p className="text-slate-500 text-lg font-medium">Persistência real no Supabase com Auditoria Master.</p>
         </div>
         <div className="flex gap-4">
            {isMaster && (
@@ -174,7 +173,7 @@ const CoreUsers: React.FC = () => {
                onClick={() => setIsAdminModalOpen(true)} 
                className="px-10 py-5 bg-emerald-600 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20"
              >
-               👑 CRIAR NOVO ADMIN
+               👑 CRIAR NOVO MASTER
              </button>
            )}
            <button 
@@ -187,7 +186,7 @@ const CoreUsers: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-[50px] border border-slate-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
@@ -199,14 +198,14 @@ const CoreUsers: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {users.map(u => (
-                <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={u.id} className="hover:bg-slate-50 transition-colors group">
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black overflow-hidden border-2 border-white shadow-md">
                          <img src={u.googleId || `https://ui-avatars.com/api/?name=${u.name}&background=0f172a&color=fff&bold=true`} className="w-full h-full object-cover" alt="" />
                       </div>
                       <div>
-                        <p className="font-black text-slate-800 text-sm">{u.name}</p>
+                        <p className="font-black text-slate-800 text-sm tracking-tight">{u.name}</p>
                         <p className="text-[10px] text-slate-400 font-bold uppercase">{u.email}</p>
                       </div>
                     </div>
@@ -216,7 +215,7 @@ const CoreUsers: React.FC = () => {
                         <select 
                           value={u.role}
                           onChange={(e) => changeUserRole(u.id, e.target.value as UserRole)}
-                          className="bg-slate-100 border-none rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-emerald-500"
+                          className="bg-slate-100 border-none rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
                         >
                            {roles.map(r => <option key={r.id} value={r.id}>{r.label.toUpperCase()}</option>)}
                         </select>
@@ -229,10 +228,10 @@ const CoreUsers: React.FC = () => {
                   </td>
                   <td className="px-8 py-6 text-right">
                      <div className="flex justify-end gap-3">
-                        <button onClick={() => { setFormData(u); setIsModalOpen(true); }} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-blue-500 font-black text-[10px] uppercase">Editar</button>
-                        <button onClick={() => toggleStatus(u.id)} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-slate-400 font-black text-[10px] uppercase">Status</button>
+                        <button onClick={() => { setFormData(u); setIsModalOpen(true); }} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-blue-500 font-black text-[10px] uppercase transition-all">Editar</button>
+                        <button onClick={() => toggleStatus(u.id)} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-slate-400 font-black text-[10px] uppercase transition-all">Status</button>
                         {u.email !== 'admin@system.local' && (isMaster || u.role !== UserRole.ADMIN_MASTER) && (
-                          <button onClick={() => { setUserToDelete(u.id); setIsConfirmDeleteOpen(true); }} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-red-400 font-black text-[10px] uppercase">Deletar</button>
+                          <button onClick={() => { setUserToDelete(u.id); setIsConfirmDeleteOpen(true); }} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-red-400 font-black text-[10px] uppercase transition-all">Excluir</button>
                         )}
                      </div>
                   </td>
@@ -243,7 +242,7 @@ const CoreUsers: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal Criar Novo Admin (Apenas Master) */}
+      {/* Modal Criar Novo Master/Admin */}
       {isAdminModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[50px] shadow-2xl p-12 animate-in zoom-in-95">
@@ -251,10 +250,10 @@ const CoreUsers: React.FC = () => {
              <form onSubmit={handleCreateAdmin} className="space-y-6">
                 <input required placeholder="Nome Completo" value={adminFormData.name} onChange={e => setAdminFormData({...adminFormData, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
                 <input required type="email" placeholder="E-mail" value={adminFormData.email} onChange={e => setAdminFormData({...adminFormData, email: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
-                <input required type="password" placeholder="Senha Temporária" value={adminFormData.password} onChange={e => setAdminFormData({...adminFormData, password: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
+                <input required type="password" placeholder="Senha Master" value={adminFormData.password} onChange={e => setAdminFormData({...adminFormData, password: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
                 <div className="space-y-2">
-                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Nível de Acesso</label>
-                   <select value={adminFormData.role} onChange={e => setAdminFormData({...adminFormData, role: e.target.value as any})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-black uppercase text-xs outline-none">
+                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Tipo de Acesso</label>
+                   <select value={adminFormData.role} onChange={e => setAdminFormData({...adminFormData, role: e.target.value as any})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-black uppercase text-xs outline-none cursor-pointer">
                       <option value={UserRole.ADMIN_MASTER}>ADMIN MASTER (Total)</option>
                       <option value={UserRole.ADMIN_OPERATIONAL}>OPERACIONAL</option>
                       <option value={UserRole.FINANCE}>FINANCEIRO</option>
@@ -262,7 +261,7 @@ const CoreUsers: React.FC = () => {
                 </div>
                 <div className="flex gap-4 pt-6">
                    <button type="submit" disabled={isSubmitting} className="flex-1 py-6 bg-emerald-600 text-white rounded-[24px] font-black uppercase text-xs shadow-xl shadow-emerald-600/20 active:scale-95 transition-all">CRIAR NO BANCO</button>
-                   <button type="button" onClick={() => setIsAdminModalOpen(false)} className="px-8 py-6 bg-slate-100 text-slate-400 rounded-[24px] font-bold uppercase text-xs">CANCELAR</button>
+                   <button type="button" onClick={() => setIsAdminModalOpen(false)} className="px-8 py-6 bg-slate-100 text-slate-400 rounded-[24px] font-bold uppercase text-xs transition-all">CANCELAR</button>
                 </div>
              </form>
           </div>
@@ -273,23 +272,26 @@ const CoreUsers: React.FC = () => {
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-[50px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95">
-            <div className="p-10 border-b border-slate-50"><h3 className="text-3xl font-black uppercase">Dados Cadastrais</h3></div>
+            <div className="p-10 border-b border-slate-50 flex justify-between items-center">
+              <h3 className="text-3xl font-black uppercase tracking-tight">Editar Registro</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-300 hover:text-slate-900 font-black">✕</button>
+            </div>
             <div className="p-10 overflow-y-auto custom-scrollbar">
               <form onSubmit={handleSaveUser} className="space-y-8">
-                <FileUpload label="Avatar do Usuário" currentUrl={formData.googleId || ''} onUploadComplete={url => setFormData({...formData, googleId: url})} circular />
+                <FileUpload label="Avatar" currentUrl={formData.googleId || ''} onUploadComplete={url => setFormData({...formData, googleId: url})} circular />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Nome Exibição</label>
                     <input required placeholder="Nome" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">E-mail Principal</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">E-mail</label>
                     <input required disabled={formData.email === 'admin@system.local'} placeholder="E-mail" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Tipo de Acesso</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Login Via</label>
                     <select value={formData.loginType} onChange={e => setFormData({...formData, loginType: e.target.value as any})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner">
                       <option value="email">E-mail e Senha</option>
                       <option value="google">Google SSO</option>
@@ -304,8 +306,8 @@ const CoreUsers: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex gap-4 pt-10 sticky bottom-0 bg-white">
-                  <button type="submit" disabled={isSubmitting} className="flex-1 py-6 bg-slate-900 text-white rounded-[28px] font-black text-sm uppercase shadow-xl active:scale-95 transition-all">{isSubmitting ? 'SINCRONIZANDO...' : 'SALVAR ALTERAÇÕES'}</button>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-10 py-6 bg-slate-100 text-slate-400 rounded-[28px] font-black text-sm uppercase">CANCELAR</button>
+                  <button type="submit" disabled={isSubmitting} className="flex-1 py-6 bg-slate-900 text-white rounded-[28px] font-black text-sm uppercase shadow-xl active:scale-95 transition-all">{isSubmitting ? 'SINCRONIZANDO...' : 'SALVAR NO SUPABASE'}</button>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-10 py-6 bg-slate-100 text-slate-400 rounded-[28px] font-black text-sm uppercase transition-all">FECHAR</button>
                 </div>
               </form>
             </div>

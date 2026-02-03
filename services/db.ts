@@ -1,11 +1,10 @@
-
 /**
- * GFITLIFE INDEXED-DB WRAPPER V2.0
+ * GFITLIFE INDEXED-DB WRAPPER V3.0
  * Objetivo: Fonte única de verdade para persistência total do ecossistema.
  */
 
-const DB_NAME = 'gfitlife_db_v2';
-const DB_VERSION = 2;
+const DB_NAME = 'gfitlife_db_v3';
+const DB_VERSION = 3;
 
 export const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -13,7 +12,6 @@ export const initDB = (): Promise<IDBDatabase> => {
 
     request.onupgradeneeded = (event: any) => {
       const db = event.target.result;
-      /* Fixed: Added missing stores used by the application components */
       const stores = [
         'users', 'config', 'products', 'orders', 'banners', 'leads', 'coupons', 
         'chat_sessions', 'api_configs', 'sellers', 'audit_logs', 'security_events', 
@@ -27,6 +25,7 @@ export const initDB = (): Promise<IDBDatabase> => {
         if (!db.objectStoreNames.contains(store)) {
           const keyPath = store === 'config' ? 'key' : 'id';
           db.createObjectStore(store, { keyPath });
+          console.log(`[DB] Store ${store} criada com sucesso (key: ${keyPath}).`);
         }
       });
     };
@@ -53,6 +52,12 @@ export const dbStore = {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(storeName, 'readwrite');
       const store = transaction.objectStore(storeName);
+      // Proteção adicional contra dados sem chave
+      const keyPath = store.keyPath as string;
+      if (!(data as any)[keyPath]) {
+         console.error(`[DB-ERROR] Tentativa de persistir em ${storeName} sem o campo obrigatório ${keyPath}.`, data);
+         return reject(`Objeto inválido para store ${storeName}`);
+      }
       const request = store.put(data);
       request.onsuccess = () => resolve();
       request.onerror = () => reject(`Erro ao persistir em ${storeName}`);
