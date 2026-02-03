@@ -21,6 +21,8 @@ import CouponsPage from './pages/CouponsPage';
 import PublicContact from './pages/PublicContact';
 import PublicAffiliateRegister from './pages/PublicAffiliateRegister';
 import PublicFavorites from './pages/PublicFavorites';
+import AffiliatePortal from './pages/AffiliatePortal';
+import CustomerPortal from './pages/CustomerPortal';
 import AICoach from './components/AICoach';
 import LGPDBanner from './components/LGPDBanner';
 
@@ -79,6 +81,7 @@ export type Route =
   | 'help-overview' | 'help-core-detail' | 'affiliate-register'
   | 'products-catalog' | 'orders' | 'store-catalog' | 'checkout' | 'store-offers' | 'public-contact'
   | 'public-home' | 'departments' | 'categories' | 'coupons' | 'favorites'
+  | 'affiliate-portal' | 'customer-portal'
   | 'mkt-banners' | 'mkt-remkt' | 'mkt-chat'
   | 'seo-onpage' | 'seo-tech' | 'seo-perf' | 'seo-audit'
   | 'fin-gateways' | 'fin-trans' | 'fin-reports'
@@ -107,6 +110,7 @@ const App: React.FC = () => {
   const [loginPass, setLoginPass] = useState('');
 
   const handleRoleLanding = (role: UserRole) => {
+    // 1. Cargos Administrativos (MASTER, FINANCE, etc)
     const staffRoles = [
       UserRole.ADMIN_MASTER, 
       UserRole.ADMIN_OPERATIONAL, 
@@ -118,7 +122,19 @@ const App: React.FC = () => {
     if (staffRoles.includes(role)) {
       setViewMode('admin');
       setCurrentRoute('dashboard');
-    } else {
+    } 
+    // 2. Afiliado -> Vai para a Loja de Afiliado (Dashboard de ganhos + vitrine)
+    else if (role === UserRole.AFFILIATE) {
+      setViewMode('store');
+      setCurrentRoute('affiliate-portal');
+    }
+    // 3. Usuário Comum -> Vai para o Painel do Usuário
+    else if (role === UserRole.CUSTOMER) {
+      setViewMode('store');
+      setCurrentRoute('customer-portal');
+    }
+    // 4. Fallback (Não logado ou desconhecido)
+    else {
       setViewMode('store');
       setCurrentRoute('public-home');
     }
@@ -143,7 +159,6 @@ const App: React.FC = () => {
             currentSession = storeService.createSession(profile);
             handleRoleLanding(profile.role);
           } else {
-            // OAuth ok no Supabase, mas e-mail não autorizado no Core > Usuários
             setAuthError('Email não autorizado no sistema');
             await storeService.logout();
             setIsSystemReady(true);
@@ -180,15 +195,8 @@ const App: React.FC = () => {
       const res = await storeService.login(loginEmail, loginPass);
       if (res.success && res.session) {
         setSession(res.session);
-        if (res.isStaff) {
-          setViewMode('admin');
-          setCurrentRoute('dashboard');
-          setFeedback({ message: 'Acesso Administrativo Autorizado', type: 'success' });
-        } else {
-          setViewMode('store');
-          setCurrentRoute('public-home');
-          setFeedback({ message: 'Bem-vindo de volta!', type: 'success' });
-        }
+        handleRoleLanding(res.session.userRole);
+        setFeedback({ message: 'Login realizado com sucesso!', type: 'success' });
         window.scrollTo({ top: 0, behavior: 'smooth' });
         setTimeout(() => setFeedback(null), 3000);
       } else {
@@ -233,7 +241,7 @@ const App: React.FC = () => {
         <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl animate-in zoom-in-95 duration-700">
           <div className="text-center space-y-6">
             <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl shadow-emerald-500/20">G</div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Console Master</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Acesso Restrito</h1>
             {authError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase border border-red-100">{authError}</div>}
             <form onSubmit={handleLogin} className="space-y-4 pt-4">
                <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="E-mail" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
@@ -242,7 +250,7 @@ const App: React.FC = () => {
             </form>
             <button onClick={handleGoogleLogin} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95">
               <img src="https://img.icons8.com/color/48/google-logo.png" className="w-6 h-6" alt="" />
-              Google Workspace
+              Google SSO
             </button>
             <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline">Voltar para a Vitrine</button>
           </div>
@@ -273,6 +281,8 @@ const App: React.FC = () => {
               {currentRoute === 'public-contact' && <PublicContact />}
               {currentRoute === 'affiliate-register' && <PublicAffiliateRegister onComplete={() => handleNavigate('public-home')} />}
               {currentRoute === 'favorites' && <PublicFavorites user={session} onAddToCart={p => setCart([...cart, p])} onNavigate={handleNavigate} />}
+              {currentRoute === 'affiliate-portal' && <AffiliatePortal user={session} onNavigate={handleNavigate} />}
+              {currentRoute === 'customer-portal' && <CustomerPortal user={session} onNavigate={handleNavigate} />}
            </main>
            <PublicFooter onNavigate={handleNavigate} />
            <AICoach isOpen={isCoachOpen} onClose={() => setIsCoachOpen(false)} />
@@ -326,6 +336,7 @@ const App: React.FC = () => {
                 {currentRoute === 'int-erp' && <IntegrationERP />}
                 {currentRoute === 'ai-recom' && <AIRecommendations />}
                 {currentRoute === 'ai-predict' && <AIPredictions />}
+                {/* Corrected component name from AIAutomationRule to AIAutomations */}
                 {currentRoute === 'ai-automations' && <AIAutomations />}
                 {currentRoute === 'ai-logs' && <AILogs />}
                 {currentRoute === 'sec-auth' && <SecurityAuth currentUser={session!} />}
