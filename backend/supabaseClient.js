@@ -20,10 +20,10 @@ const checkKeySecurity = (url, key) => {
     return { valid: false };
   }
   
-  // Apenas bloqueia se detectarmos explicitamente que a chave ANON é na verdade a SERVICE_ROLE
-  const looksLikeServiceKey = key.includes('service_role');
+  // Bloqueio explícito se detectar chave secreta (service_role)
+  const looksLikeServiceKey = key.length > 100 || key.includes('service_role');
   if (looksLikeServiceKey) {
-    console.error('🚨 ERRO CRÍTICO: SUPABASE_SERVICE_ROLE_KEY detectada no frontend. Operação bloqueada por segurança.');
+    console.error('🚨 ERRO CRÍTICO: Chave de SERVIÇO detectada no frontend. Operação bloqueada por segurança.');
     return { valid: false };
   }
 
@@ -33,7 +33,7 @@ const checkKeySecurity = (url, key) => {
 const securityStatus = checkKeySecurity(supabaseUrl, supabaseAnonKey);
 
 /**
- * Exporta o cliente apenas se a configuração for válida.
+ * Exporta o cliente apenas se a configuração for válida e segura.
  */
 export const supabase = securityStatus.valid 
   ? createClient(supabaseUrl, supabaseAnonKey)

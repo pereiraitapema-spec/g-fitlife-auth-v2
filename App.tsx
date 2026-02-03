@@ -175,10 +175,11 @@ const App: React.FC = () => {
         if (res.isStaff) {
           setViewMode('admin');
           setCurrentRoute('dashboard');
+          setFeedback({ message: 'Acesso Administrativo Autorizado', type: 'success' });
         } else {
-          setFeedback({ message: `Bem-vindo à loja!`, type: 'success' });
           setViewMode('store');
           setCurrentRoute('public-home');
+          setFeedback({ message: 'Bem-vindo de volta!', type: 'success' });
         }
         setTimeout(() => setFeedback(null), 3000);
       } else {

@@ -1,4 +1,3 @@
-
 import { 
   Order, Lead, Product, Coupon, OrderStatus, 
   AppUser, Department, Category, SystemSettings, 
@@ -64,11 +63,11 @@ export const storeService = {
   },
 
   async login(email: string, pass: string) {
-    // Fallback Master Local
+    // Fallback Master Local (Sempre funcional para emergências)
     if (email.trim().toLowerCase() === 'admin@system.local' && pass === 'admin123') {
       const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email: email.toLowerCase(), role: UserRole.ADMIN_MASTER, status: UserStatus.ACTIVE };
       const session = this.createSession(fallbackAdmin);
-      return { success: true, session, profile: fallbackAdmin };
+      return { success: true, session, profile: fallbackAdmin, isStaff: true };
     }
 
     if (supabase) {
@@ -82,58 +81,52 @@ export const storeService = {
           const profile = await this.getProfileAfterLogin(data.user.id);
           if (profile) {
             if (profile.status !== UserStatus.ACTIVE) {
-              return { success: false, error: 'Conta suspensa. Contate o suporte.' };
+              return { success: false, error: 'Conta suspensa. Contate o administrador.' };
             }
             const session = this.createSession(profile);
-            const isStaff = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING, UserRole.SELLER].includes(profile.role);
+            // Staff: cargos que acessam o Admin Master
+            const staffRoles = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING, UserRole.SELLER];
+            const isStaff = staffRoles.includes(profile.role);
             return { success: true, session, profile, isStaff };
           }
         } else if (error) {
-           return { success: false, error: 'Credenciais inválidas ou acesso negado.' };
+           return { success: false, error: 'E-mail ou senha incorretos.' };
         }
       } catch (err) {
         console.error("Erro auth remota:", err);
       }
     }
     
-    return { success: false, error: 'Falha na conexão com o servidor.' };
+    return { success: false, error: 'Falha na conexão com o servidor de autenticação.' };
   },
 
-  // Fix: Added missing loginWithGoogle method to resolve "Property 'loginWithGoogle' does not exist" error in App.tsx
   async loginWithGoogle() {
-    if (supabase) {
-      try {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: window.location.origin
-          }
-        });
-        if (error) return { success: false, error: error.message };
-        return { success: true };
-      } catch (err) {
-        console.error("Erro Google Auth:", err);
-        return { success: false, error: 'Falha na conexão com Google' };
-      }
+    if (!supabase) return { success: false, error: 'Supabase Offline' };
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin }
+      });
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: 'Erro ao conectar com Google' };
     }
-    return { success: false, error: 'Supabase não configurado' };
   },
 
   async registerAffiliate(data: { name: string, email: string, reason: string }) {
     if (supabase) {
-      // Criação de perfil preliminar para aprovação
       const newAffiliate = {
         name: data.name,
         email: data.email.toLowerCase(),
         role: UserRole.AFFILIATE,
-        status: UserStatus.INACTIVE, // Precisa de liberação master
+        status: UserStatus.INACTIVE, // Aguardando liberação
         created_at: new Date().toISOString()
       };
       
       const { data: res, error } = await supabase.from('users_profile').insert(newAffiliate).select().single();
       if (error) throw error;
 
-      // Cria registro na tabela de afiliados
       await supabase.from('affiliates').insert({
         userId: res.id,
         name: res.name,
@@ -142,7 +135,7 @@ export const storeService = {
         commissionRate: 10,
         totalSales: 0,
         balance: 0,
-        refCode: Math.random().toString(36).substring(7).toUpperCase()
+        refCode: '' // Será gerado na aprovação
       });
 
       return { success: true };
@@ -152,8 +145,12 @@ export const storeService = {
 
   async approveAffiliate(userId: string) {
     if (supabase) {
+      const refCode = Math.random().toString(36).substring(2, 8).toUpperCase();
       await supabase.from('users_profile').update({ status: UserStatus.ACTIVE }).eq('id', userId);
-      await supabase.from('affiliates').update({ status: 'active' }).eq('userId', userId);
+      await supabase.from('affiliates').update({ 
+        status: 'active',
+        refCode: refCode 
+      }).eq('userId', userId);
       window.dispatchEvent(new Event('usersChanged'));
       return true;
     }
@@ -162,31 +159,24 @@ export const storeService = {
 
   async updateMyCredentials(userId: string, email: string, password?: string) {
     if (!supabase) return false;
-    
     try {
       const updates: any = { email };
       if (password) updates.password = password;
-
       const { error } = await supabase.auth.updateUser(updates);
       if (error) throw error;
-
-      // Log de auditoria
-      await this.logAudit(userId, `Alterou e-mail/senha da própria conta.`);
-      
+      await this.logAudit(userId, `Auto-atualização de credenciais de acesso.`);
       return true;
     } catch (err) {
-      console.error(err);
       return false;
     }
   },
 
   async logAudit(userId: string, action: string) {
     if (supabase) {
-      const { data: user } = await this.getUsers();
-      const userName = user.find((u: any) => u.id === userId)?.name || 'Usuário';
+      const { data: users } = await supabase.from('users_profile').select('name').eq('id', userId).single();
       await supabase.from('audit_logs').insert({
         userId,
-        userName,
+        userName: users?.name || 'Sistema',
         action,
         timestamp: new Date().toISOString()
       });
@@ -201,7 +191,7 @@ export const storeService = {
         if (authUser.user) {
            const newProfile = {
              id: authUser.user.id,
-             name: authUser.user.user_metadata.full_name || 'Membro G-FitLife',
+             name: authUser.user.user_metadata.full_name || 'Usuário G-FitLife',
              email: authUser.user.email,
              role: UserRole.CUSTOMER,
              status: UserStatus.ACTIVE,
@@ -222,9 +212,7 @@ export const storeService = {
   async saveSettings(settings: SystemSettings): Promise<void> {
     const dataToSave = { ...settings, key: 'geral' };
     await dbStore.put('config', dataToSave);
-    if (supabase) {
-      await supabase.from('core_settings').upsert(dataToSave);
-    }
+    if (supabase) await supabase.from('core_settings').upsert(dataToSave);
     window.dispatchEvent(new Event('systemSettingsChanged'));
   },
 
@@ -257,17 +245,15 @@ export const storeService = {
 
   async getUsers(): Promise<AppUser[]> {
     if (supabase) {
-      const { data: remoteUsers } = await supabase.from('users_profile').select('*');
-      if (remoteUsers) return remoteUsers as AppUser[];
+      const { data } = await supabase.from('users_profile').select('*');
+      return data || [];
     }
     return await dbStore.getAll<AppUser>('users');
   },
 
   async saveUser(user: AppUser): Promise<void> {
     await dbStore.put('users', user);
-    if (supabase) {
-      await supabase.from('users_profile').upsert(user);
-    }
+    if (supabase) await supabase.from('users_profile').upsert(user);
     window.dispatchEvent(new Event('usersChanged'));
   },
 
@@ -292,14 +278,26 @@ export const storeService = {
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Falha ao excluir administrador');
+      throw new Error(error.error || 'Falha ao excluir');
     }
     window.dispatchEvent(new Event('usersChanged'));
     return true;
   },
 
-  async getProducts(): Promise<Product[]> { return await dbStore.getAll<Product>('products'); },
-  async getOrders(): Promise<Order[]> { return await dbStore.getAll<Order>('orders'); },
+  async getProducts(): Promise<Product[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('products').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Product>('products'); 
+  },
+  async getOrders(): Promise<Order[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('orders').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Order>('orders'); 
+  },
   async getDepartments(): Promise<Department[]> { return await dbStore.getAll<Department>('departments'); },
   async getCategories(): Promise<Category[]> { return await dbStore.getAll<Category>('categories'); },
   async getCoupons(): Promise<Coupon[]> { return await dbStore.getAll<Coupon>('coupons'); },
@@ -330,14 +328,6 @@ export const storeService = {
   async updateUserStatus(id: string, status: UserStatus): Promise<void> {
     if (supabase) await supabase.from('users_profile').update({ status }).eq('id', id);
     window.dispatchEvent(new Event('usersChanged'));
-  },
-
-  async deleteUser(id: string): Promise<boolean> {
-    if (supabase) {
-      await supabase.from('users_profile').delete().eq('id', id);
-    }
-    window.dispatchEvent(new Event('usersChanged'));
-    return true;
   },
 
   async saveDepartment(dept: Department): Promise<void> { await dbStore.put('departments', dept); window.dispatchEvent(new Event('departmentsChanged')); },

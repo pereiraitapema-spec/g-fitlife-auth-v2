@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 const SYSTEM_INSTRUCTION = `
@@ -15,7 +14,7 @@ Diretrizes:
 
 export const getAICoachResponse = async (userPrompt: string, history: {role: 'user' | 'model', parts: {text: string}[]}[]) => {
   try {
-    // Fix: Updated initialization to strictly follow the required pattern for GoogleGenAI
+    // Inicialização segura via process.env.API_KEY
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const response = await ai.models.generateContent({
