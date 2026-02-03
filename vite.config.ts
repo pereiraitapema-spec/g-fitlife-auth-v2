@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Configuração obrigatória para o build do React com Vite
 export default defineConfig({
   plugins: [react()],
+  define: {
+    'process.env': process.env
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -11,5 +13,11 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
   }
 });
