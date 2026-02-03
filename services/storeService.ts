@@ -60,7 +60,6 @@ export const storeService = {
 
   async login(email: string, pass: string) {
     try {
-      // Auditoria no Backend Próprio (Requisito Profissional)
       await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,7 +84,6 @@ export const storeService = {
       const session = this.createSession(profile);
       return { success: true, session, forcePasswordChange: profile.isDefaultPassword };
     } catch (err) {
-      // Fallback para admin padrão caso offline
       if (email === 'admin@system.local' && pass === 'admin123') {
         const fallbackAdmin = { id: 'admin-0', name: 'Super Admin', email, role: UserRole.ADMIN_MASTER };
         return { success: true, session: this.createSession(fallbackAdmin) };
@@ -112,6 +110,20 @@ export const storeService = {
     
     if (error) return { success: false, error: error.message };
     return { success: true };
+  },
+
+  async createAdminUser(userData: any) {
+    const response = await fetch('/api/admin/create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+    
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Falha ao criar admin');
+    
+    window.dispatchEvent(new Event('usersChanged'));
+    return result;
   },
 
   async saveUser(u: AppUser): Promise<void> {
@@ -205,7 +217,9 @@ export const storeService = {
     return [
       { id: UserRole.ADMIN_MASTER, label: 'Admin Master', permissions: [] },
       { id: UserRole.ADMIN_OPERATIONAL, label: 'Operacional', permissions: [] },
-      { id: UserRole.CUSTOMER, label: 'Usuário Final', permissions: [] }
+      { id: UserRole.CUSTOMER, label: 'Usuário Final', permissions: [] },
+      { id: UserRole.FINANCE, label: 'Financeiro', permissions: [] },
+      { id: UserRole.MARKETING, label: 'Marketing', permissions: [] }
     ];
   },
 

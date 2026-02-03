@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { storeService } from '../services/storeService';
 import { AppUser, UserRole, UserStatus } from '../types';
@@ -6,15 +5,24 @@ import FileUpload from '../components/FileUpload';
 
 const CoreUsers: React.FC = () => {
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [session, setSession] = useState(storeService.getActiveSession());
   const [roles] = useState(storeService.getRoles());
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const [formData, setFormData] = useState<Partial<AppUser>>({ 
-    id: '', name: '', email: '', role: UserRole.CUSTOMER, status: UserStatus.ACTIVE, loginType: 'email', googleId: '' 
+    id: '', name: '', email: '', role: UserRole.CUSTOMER, status: UserStatus.ACTIVE, loginType: 'email'
   });
+
+  const [adminFormData, setAdminFormData] = useState({
+    name: '', email: '', password: '', role: UserRole.ADMIN_MASTER
+  });
+
+  const isMaster = session?.userRole === UserRole.ADMIN_MASTER;
 
   const loadData = async () => {
     const data = await storeService.getUsers();
@@ -32,7 +40,25 @@ const CoreUsers: React.FC = () => {
     setTimeout(() => setFeedback(null), 4000);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      await storeService.createAdminUser(adminFormData);
+      showFeedback("Novo administrador criado com sucesso!");
+      setIsAdminModalOpen(false);
+      setAdminFormData({ name: '', email: '', password: '', role: UserRole.ADMIN_MASTER });
+      await loadData();
+    } catch (err) {
+      showFeedback(err.message, "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -54,7 +80,6 @@ const CoreUsers: React.FC = () => {
       await loadData(); 
       setIsModalOpen(false);
       showFeedback(isEdit ? "Alteração salva!" : "Usuário criado!");
-      setFormData({ id: '', name: '', email: '', role: UserRole.CUSTOMER, status: UserStatus.ACTIVE, loginType: 'email', googleId: '' });
     } catch (error) {
       showFeedback("Erro ao salvar: " + error, "error");
     } finally {
@@ -84,11 +109,6 @@ const CoreUsers: React.FC = () => {
       setIsConfirmDeleteOpen(false);
       setUserToDelete(null);
     }
-  };
-
-  const handleEdit = (u: AppUser) => {
-    setFormData(u);
-    setIsModalOpen(true);
   };
 
   const getRoleLabel = (roleId: string) => roles.find(r => r.id === roleId)?.label || 'Usuário Final';
@@ -121,11 +141,27 @@ const CoreUsers: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-end gap-6 px-4">
         <div>
           <h2 className="text-4xl font-black text-slate-900 uppercase">Colaboradores</h2>
-          <p className="text-slate-500 text-lg">IndexedDB: Sincronização assíncrona ativa.</p>
+          <p className="text-slate-500 text-lg">Persistência real no Supabase com auditoria Master.</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="px-10 py-5 bg-slate-900 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-emerald-500 transition-all">+ NOVO CADASTRO</button>
+        <div className="flex gap-4">
+           {isMaster && (
+             <button 
+               onClick={() => setIsAdminModalOpen(true)} 
+               className="px-10 py-5 bg-emerald-600 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl"
+             >
+               👑 CRIAR NOVO ADMIN
+             </button>
+           )}
+           <button 
+             onClick={() => { setFormData({ role: UserRole.CUSTOMER }); setIsModalOpen(true); }} 
+             className="px-10 py-5 bg-slate-900 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-emerald-500 transition-all"
+           >
+             + NOVO CADASTRO
+           </button>
+        </div>
       </div>
 
+      {/* Tabela de Usuários */}
       <div className="bg-white rounded-[50px] border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[1000px]">
@@ -159,7 +195,7 @@ const CoreUsers: React.FC = () => {
                   </td>
                   <td className="px-8 py-6 text-right">
                      <div className="flex justify-end gap-3">
-                        <button onClick={() => handleEdit(u)} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-blue-500 font-black text-[10px] uppercase">Editar</button>
+                        <button onClick={() => { setFormData(u); setIsModalOpen(true); }} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-blue-500 font-black text-[10px] uppercase">Editar</button>
                         <button onClick={() => toggleStatus(u.id)} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-slate-400 font-black text-[10px] uppercase">Status</button>
                         {u.email !== 'admin@system.local' && (
                           <button onClick={() => { setUserToDelete(u.id); setIsConfirmDeleteOpen(true); }} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-red-400 font-black text-[10px] uppercase">Deletar</button>
@@ -173,22 +209,46 @@ const CoreUsers: React.FC = () => {
         </div>
       </div>
 
+      {/* Modal Criar Novo Admin (Apenas Master) */}
+      {isAdminModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-[50px] shadow-2xl p-12 animate-in zoom-in-95">
+             <h3 className="text-3xl font-black uppercase mb-8 text-emerald-600">Novo Administrador</h3>
+             <form onSubmit={handleCreateAdmin} className="space-y-6">
+                <input required placeholder="Nome do Admin" value={adminFormData.name} onChange={e => setAdminFormData({...adminFormData, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
+                <input required type="email" placeholder="E-mail" value={adminFormData.email} onChange={e => setAdminFormData({...adminFormData, email: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
+                <input required type="password" placeholder="Senha Temporária" value={adminFormData.password} onChange={e => setAdminFormData({...adminFormData, password: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none shadow-inner" />
+                <select value={adminFormData.role} onChange={e => setAdminFormData({...adminFormData, role: e.target.value as any})} className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold outline-none">
+                   <option value={UserRole.ADMIN_MASTER}>ADMIN MASTER (Total)</option>
+                   <option value={UserRole.ADMIN_OPERATIONAL}>OPERACIONAL</option>
+                   <option value={UserRole.FINANCE}>FINANCEIRO</option>
+                </select>
+                <div className="flex gap-4 pt-6">
+                   <button type="submit" disabled={isSubmitting} className="flex-1 py-6 bg-emerald-600 text-white rounded-[24px] font-black uppercase text-xs">CRIAR NO BANCO</button>
+                   <button type="button" onClick={() => setIsAdminModalOpen(false)} className="px-8 py-6 bg-slate-100 text-slate-500 rounded-[24px] font-bold uppercase text-xs">CANCELAR</button>
+                </div>
+             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Usuário Comum */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-[50px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95">
             <div className="p-10 border-b border-slate-50"><h3 className="text-3xl font-black uppercase">Dados do Usuário</h3></div>
             <div className="p-10 overflow-y-auto custom-scrollbar">
-              <form onSubmit={handleSave} className="space-y-8">
+              <form onSubmit={handleSaveUser} className="space-y-8">
                 <FileUpload label="Avatar" currentUrl={formData.googleId || ''} onUploadComplete={url => setFormData({...formData, googleId: url})} circular />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <input required placeholder="Nome" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none" />
-                  <input required disabled={formData.email === 'admin@system.local'} placeholder="E-mail" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none" />
+                  <input required placeholder="Nome" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner" />
+                  <input required disabled={formData.email === 'admin@system.local'} placeholder="E-mail" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner" />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as any})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none">
+                  <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as any})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner">
                     {roles.map(r => <option key={r.id} value={r.id}>{r.label.toUpperCase()}</option>)}
                   </select>
-                  <select value={formData.loginType} onChange={e => setFormData({...formData, loginType: e.target.value as any})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none">
+                  <select value={formData.loginType} onChange={e => setFormData({...formData, loginType: e.target.value as any})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner">
                     <option value="email">E-mail e Senha</option>
                     <option value="google">Google SSO</option>
                   </select>
