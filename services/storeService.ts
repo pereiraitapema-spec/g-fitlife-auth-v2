@@ -14,7 +14,7 @@ export const storeService = {
     try {
       let config = null;
       if (supabase) {
-        const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').single();
+        const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').maybeSingle();
         config = data;
       }
 
@@ -85,7 +85,7 @@ export const storeService = {
     } catch (err) {
       return { success: false, error: 'Erro de conexão' };
     }
-    return { success: false, error: 'Perfil não encontrado' };
+    return { success: false, error: 'Perfil não registrado no sistema.' };
   },
 
   async loginWithGoogle() {
@@ -93,21 +93,58 @@ export const storeService = {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin }
+        options: { 
+          redirectTo: window.location.origin,
+          queryParams: { prompt: 'select_account' }
+        }
       });
       if (error) throw error;
       return { success: true };
     } catch (err) {
-      return { success: false, error: 'Falha no login social' };
+      console.error("Google Auth Error:", err);
+      return { success: false, error: 'Falha na conexão com Google' };
     }
+  },
+
+  async getProfileAfterLogin(userId: string) {
+    if (!supabase) return null;
+    
+    // 1. Tentar busca direta pelo UUID
+    const { data: profileByUid } = await supabase.from('users_profile').select('*').eq('id', userId).maybeSingle();
+    if (profileByUid) return profileByUid;
+
+    // 2. Se não achou pelo UID, verificar se o e-mail do Auth existe na tabela de perfis
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (authUser?.email) {
+      const email = authUser.email.toLowerCase();
+      const { data: profileByEmail } = await supabase.from('users_profile').select('*').eq('email', email).maybeSingle();
+      
+      if (profileByEmail) {
+        // Vincula o UUID do Google ao perfil existente se for o primeiro login social
+        await supabase.from('users_profile').update({ id: authUser.id }).eq('email', email);
+        return { ...profileByEmail, id: authUser.id };
+      } else {
+        // Se for um login Google totalmente novo (cliente final), cria o perfil automaticamente
+        const newProfile = {
+          id: authUser.id,
+          email: email,
+          name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'Novo Usuário G-Fit',
+          role: UserRole.CUSTOMER,
+          status: UserStatus.ACTIVE,
+          loginType: 'google',
+          created_at: new Date().toISOString()
+        };
+        const { data: created } = await supabase.from('users_profile').insert(newProfile).select().single();
+        return created;
+      }
+    }
+    return null;
   },
 
   async registerAffiliate(data: { name: string, email: string, reason: string }) {
     if (!supabase) throw new Error('Supabase não conectado');
     
     try {
-      // 1. Upsert no perfil para garantir que o usuário existe como INACTIVE e papel AFFILIATE
-      // Usamos onConflict 'email' para não quebrar se o email já estiver cadastrado
       const { data: profile, error: pError } = await supabase.from('users_profile').upsert({
         name: data.name,
         email: data.email.toLowerCase(),
@@ -118,7 +155,6 @@ export const storeService = {
 
       if (pError) throw pError;
 
-      // 2. Upsert na tabela de afiliados vinculando ao ID do perfil gerado/encontrado
       const { error: aError } = await supabase.from('affiliates').upsert({
         userId: profile.id,
         name: data.name,
@@ -133,44 +169,30 @@ export const storeService = {
       if (aError) throw aError;
       return { success: true };
     } catch (err) {
-      console.error("Erro crítico no registro de afiliado:", err);
+      console.error("Erro no registro de afiliado:", err);
       throw err;
     }
   },
 
   async uploadFile(file: File): Promise<string> {
-    if (!supabase) throw new Error('Supabase não conectado');
-    
+    if (!supabase) throw new Error('Offline');
     const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const fileName = `${Date.now()}.${fileExt}`;
     const filePath = `products/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('uploads')
-      .upload(filePath, file);
-
-    if (uploadError) throw uploadError;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('uploads')
-      .getPublicUrl(filePath);
-
+    const { error } = await supabase.storage.from('uploads').upload(filePath, file);
+    if (error) throw error;
+    const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filePath);
     return publicUrl;
   },
 
   async saveUser(user: AppUser): Promise<void> {
     if (supabase) {
-      // Removemos o ID se for um novo cadastro fake para deixar o Supabase gerar o UUID se necessário
       const payload = { ...user };
-      if (payload.id && (payload.id.startsWith('u-') || payload.id.includes('temp'))) {
+      if (payload.id && (payload.id.startsWith('temp') || payload.id.includes('sess'))) {
           delete (payload as any).id;
       }
-      
       const { error } = await supabase.from('users_profile').upsert(payload, { onConflict: 'email' });
-      if (error) {
-          console.error("Erro ao salvar usuário no Supabase:", error);
-          throw error;
-      }
+      if (error) throw error;
     }
     await dbStore.put('users', user);
     window.dispatchEvent(new Event('usersChanged'));
@@ -179,10 +201,7 @@ export const storeService = {
   async saveProduct(p: Product): Promise<void> {
     if (supabase) {
       const { error } = await supabase.from('products').upsert(p);
-      if (error) {
-          console.error("Erro ao salvar produto no Supabase:", error);
-          throw error;
-      }
+      if (error) throw error;
     }
     await dbStore.put('products', p);
     window.dispatchEvent(new Event('productsChanged'));
@@ -197,27 +216,9 @@ export const storeService = {
     window.dispatchEvent(new Event('ordersChanged'));
   },
 
-  async getProfileAfterLogin(userId: string) {
-    if (!supabase) return null;
-    const { data: profile } = await supabase.from('users_profile').select('*').eq('id', userId).single();
-    if (profile) return profile;
-
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (authUser) {
-       const email = authUser.email?.toLowerCase();
-       const { data: allProfiles } = await supabase.from('users_profile').select('*');
-       const found = allProfiles?.find(p => p.email.toLowerCase() === email);
-       if (found) {
-          await supabase.from('users_profile').update({ id: authUser.id }).eq('id', found.id);
-          return { ...found, id: authUser.id };
-       }
-    }
-    return null;
-  },
-
   async getSettings(): Promise<SystemSettings> {
     if (supabase) {
-      const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').single();
+      const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').maybeSingle();
       if (data) return data as SystemSettings;
     }
     const data = await dbStore.getByKey<any>('config', 'geral');
@@ -339,7 +340,7 @@ export const storeService = {
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Falha ao criar administrador');
+      throw new Error(error.error || 'Falha ao criar');
     }
     window.dispatchEvent(new Event('usersChanged'));
   },
@@ -445,7 +446,7 @@ export const storeService = {
   },
 
   async saveConsent(userEmail: string, accepted: boolean): Promise<void> {
-    const consent: LGPDConsent = { id: 'con-' + Date.now(), userEmail, accepted, ip: '189.12.34.56', userAgent: navigator.userAgent, timestamp: new Date().toISOString() };
+    const consent: LGPDConsent = { id: 'con-' + Date.now(), userEmail, accepted, ip: '0.0.0.0', userAgent: navigator.userAgent, timestamp: new Date().toISOString() };
     if (supabase) await supabase.from('lgpd_consents').insert(consent);
     await dbStore.put('consents', consent); 
     window.dispatchEvent(new Event('consentsChanged'));
@@ -468,10 +469,6 @@ export const storeService = {
 
   async updateOrderStatus(id: string, newStatus: OrderStatus): Promise<void> {
     if (supabase) await supabase.from('orders').update({ status: newStatus }).eq('id', id);
-    const order = await dbStore.getByKey<Order>('orders', id);
-    if (order) {
-      await dbStore.put('orders', { ...order, status: newStatus });
-    }
     window.dispatchEvent(new Event('ordersChanged'));
   },
 
@@ -484,13 +481,7 @@ export const storeService = {
   },
 
   async triggerRemarketing(lead: Lead): Promise<void> {
-    const log: RemarketingLog = {
-      id: 'remkt-' + Date.now(),
-      leadEmail: lead.email,
-      productName: lead.productName,
-      sentAt: new Date().toISOString(),
-      status: 'sent'
-    };
+    const log: RemarketingLog = { id: 'remkt-' + Date.now(), leadEmail: lead.email, productName: lead.productName, sentAt: new Date().toISOString(), status: 'sent' };
     await dbStore.put('remarketing_logs', log);
   },
 
@@ -500,9 +491,7 @@ export const storeService = {
 
   async updateChatStatus(id: string, status: 'active' | 'escalated' | 'closed'): Promise<void> {
     const session = await dbStore.getByKey<AIChatSession>('chat_sessions', id);
-    if (session) {
-      await dbStore.put('chat_sessions', { ...session, status });
-    }
+    if (session) await dbStore.put('chat_sessions', { ...session, status });
   },
 
   async getPerformanceMetrics(): Promise<PerformanceMetric[]> {
@@ -551,14 +540,7 @@ export const storeService = {
   },
 
   async createDeploy(version: string, deployedBy: string, changelog: string): Promise<void> {
-    const deploy: DeployRecord = {
-      id: 'dep-' + Date.now(),
-      version,
-      status: 'success',
-      deployedBy,
-      timestamp: new Date().toISOString(),
-      changelog
-    };
+    const deploy: DeployRecord = { id: 'dep-' + Date.now(), version, status: 'success', deployedBy, timestamp: new Date().toISOString(), changelog };
     await dbStore.put('deploys', deploy);
   },
 
@@ -567,24 +549,12 @@ export const storeService = {
   },
 
   async createBackup(name: string): Promise<void> {
-    const backup: BackupRecord = {
-      id: 'bak-' + Date.now(),
-      name,
-      size: (Math.random() * 50 + 10).toFixed(1) + 'MB',
-      status: 'completed',
-      timestamp: new Date().toISOString()
-    };
+    const backup: BackupRecord = { id: 'bak-' + Date.now(), name, size: '25MB', status: 'completed', timestamp: new Date().toISOString() };
     await dbStore.put('backups', backup);
   },
 
   getInfraMetrics(): InfraMetric {
-    return {
-      uptime: '14d 6h 22m',
-      latency: Math.floor(Math.random() * 40) + 10,
-      cpu: Math.floor(Math.random() * 20) + 5,
-      ram: Math.floor(Math.random() * 30) + 40,
-      lastHealthCheck: new Date().toISOString()
-    };
+    return { uptime: '14d 6h', latency: 25, cpu: 12, ram: 45, lastHealthCheck: new Date().toISOString() };
   },
 
   async getSellers(): Promise<Seller[]> {
@@ -596,26 +566,16 @@ export const storeService = {
   },
 
   getUserPersonalData(email: string): any {
-    return {
-      user: { name: 'Usuário G-Fit', email, createdAt: new Date().toISOString() },
-      orders: [],
-      leads: []
-    };
+    return { user: { name: 'Usuário', email }, orders: [], leads: [] };
   },
 
-  async logLGPD(type: 'consent' | 'revocation' | 'data_export' | 'data_deletion', userEmail: string, message: string): Promise<void> {
-    const log: LGPDLog = {
-      id: 'lgpd-' + Date.now(),
-      type,
-      userEmail,
-      message,
-      timestamp: new Date().toISOString()
-    };
+  async logLGPD(type: any, userEmail: string, message: string): Promise<void> {
+    const log: LGPDLog = { id: 'lgpd-' + Date.now(), type, userEmail, message, timestamp: new Date().toISOString() };
     await dbStore.put('lgpd_logs', log);
   },
 
   async deleteUserPersonalData(email: string): Promise<void> {
-    console.warn('[LGPD] Excluindo dados de:', email);
+    console.warn('[LGPD] Exclusão:', email);
   },
 
   async getLGPDLogs(): Promise<LGPDLog[]> {
@@ -623,11 +583,7 @@ export const storeService = {
   },
 
   getPWAMetrics(): any {
-    return {
-      installs: 124,
-      activeUsersMobile: 89,
-      version: '4.2.0-stable'
-    };
+    return { installs: 124, activeUsersMobile: 89, version: '4.2.0' };
   },
 
   async getPWANotifications(): Promise<PWANotification[]> {
@@ -635,13 +591,7 @@ export const storeService = {
   },
 
   async sendPWANotification(title: string, body: string): Promise<void> {
-    const notification: PWANotification = {
-      id: 'pwa-' + Date.now(),
-      title,
-      body,
-      sentAt: new Date().toISOString(),
-      deliveredCount: 124
-    };
+    const notification: PWANotification = { id: 'pwa-' + Date.now(), title, body, sentAt: new Date().toISOString(), deliveredCount: 124 };
     await dbStore.put('pwa_notifications', notification);
   },
 
@@ -656,9 +606,7 @@ export const storeService = {
   async syncCRM(provider: string): Promise<void> {
     const configs = await this.getAPIConfigs();
     const cfg = configs.find(c => c.provider === provider);
-    if (cfg) {
-      await this.saveAPIConfig({ ...cfg, lastSync: new Date().toISOString() });
-    }
+    if (cfg) await this.saveAPIConfig({ ...cfg, lastSync: new Date().toISOString() });
   },
 
   async getWAMessages(): Promise<WhatsAppMessage[]> {
@@ -666,23 +614,14 @@ export const storeService = {
   },
 
   async sendWAMessage(userEmail: string, content: string, trigger: string): Promise<void> {
-    const msg: WhatsAppMessage = {
-      id: 'wa-' + Date.now(),
-      userEmail,
-      content,
-      trigger: trigger as any,
-      status: 'sent',
-      timestamp: new Date().toISOString()
-    };
+    const msg: WhatsAppMessage = { id: 'wa-' + Date.now(), userEmail, content, trigger: trigger as any, status: 'sent', timestamp: new Date().toISOString() };
     await dbStore.put('wa_messages', msg);
   },
 
   async syncERP(provider: string): Promise<void> {
     const configs = await this.getAPIConfigs();
     const cfg = configs.find(c => c.provider === provider);
-    if (cfg) {
-      await this.saveAPIConfig({ ...cfg, lastSync: new Date().toISOString() });
-    }
+    if (cfg) await this.saveAPIConfig({ ...cfg, lastSync: new Date().toISOString() });
   },
 
   async getSyncLogs(): Promise<IntegrationSyncLog[]> {

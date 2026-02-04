@@ -127,26 +127,34 @@ const App: React.FC = () => {
     } else if (role === UserRole.AFFILIATE) {
       setViewMode('store');
       setCurrentRoute('affiliate-portal');
-    } else if (role === UserRole.CUSTOMER) {
-      setViewMode('store');
-      setCurrentRoute('customer-portal');
     } else {
       setViewMode('store');
-      setCurrentRoute('public-home');
+      setCurrentRoute('customer-portal');
     }
   };
 
   const syncAuth = async () => {
     if (!supabase) return;
-    const { data } = await supabase.auth.getSession();
-    if (data.session) {
-      const profile = await storeService.getProfileAfterLogin(data.session.user.id);
-      if (profile && profile.status === UserStatus.ACTIVE) {
-        const newSession = storeService.createSession(profile);
-        setSession(newSession);
-        handleRoleLanding(profile.role);
-      } else if (profile && profile.status === UserStatus.INACTIVE) {
-        setAuthError('Sua conta está aguardando aprovação master.');
+    
+    // Pegar sessão atual (pode vir de um redirect OAuth)
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    
+    if (currentSession) {
+      const profile = await storeService.getProfileAfterLogin(currentSession.user.id);
+      
+      if (profile) {
+        if (profile.status === UserStatus.ACTIVE) {
+          const newSession = storeService.createSession(profile);
+          setSession(newSession);
+          handleRoleLanding(profile.role);
+          setFeedback({ message: `Bem-vindo, ${profile.name}!`, type: 'success' });
+          setTimeout(() => setFeedback(null), 3000);
+        } else {
+          setAuthError('Sua conta está inativa ou aguardando aprovação.');
+          await supabase.auth.signOut();
+        }
+      } else {
+        setAuthError('Perfil não encontrado para este e-mail.');
         await supabase.auth.signOut();
       }
     }
@@ -239,7 +247,7 @@ const App: React.FC = () => {
 
             <div className="relative py-4">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
-              <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest"><span className="bg-white px-4 text-slate-400">ou entre com</span></div>
+              <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest"><span className="bg-white px-4 text-slate-400">ou escolha sua conta</span></div>
             </div>
 
             <button 
@@ -249,7 +257,7 @@ const App: React.FC = () => {
               className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
             >
               <img src="https://img.icons8.com/color/24/google-logo.png" alt="Google" className="w-5 h-5" />
-              Continuar com Google
+              Entrar com Google
             </button>
 
             <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline mt-4 block mx-auto">Voltar para a vitrine pública</button>
@@ -261,7 +269,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden relative">
-      {/* Feedback Overlay - Garantindo que não bloqueie nada se não estiver ativo */}
       {feedback && (
         <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-10 pointer-events-none">
           <div className={`px-12 py-5 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest pointer-events-auto ${feedback.type === 'error' ? 'bg-red-900' : 'bg-slate-900'}`}>
