@@ -16,15 +16,16 @@ async function seedMasterUser() {
     const email = process.env.MASTER_EMAIL || 'admin@system.local';
     const password = process.env.MASTER_PASSWORD || 'admin123';
 
-    console.log('[CORE-SEED] Validando Usuário Master via Service Role...');
+    console.log('[CORE-SEED] Iniciando validação de infraestrutura...');
     
+    // Verificação de existência do usuário no Auth via listUsers
     const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     if (listError) throw listError;
 
     let targetUser = usersData.users.find(u => u.email === email);
 
     if (!targetUser) {
-      console.log('[CORE-SEED] Criando novo Master no Auth...');
+      console.log('[CORE-SEED] Criando credenciais Master no Auth Service...');
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
@@ -36,7 +37,7 @@ async function seedMasterUser() {
     }
 
     if (targetUser) {
-      // CORREÇÃO: Tabela 'user_profile' (singular)
+      // Garantir perfil na tabela pública (user_profile singular)
       const { error: profileError } = await supabaseAdmin.from('user_profile').upsert({
         id: targetUser.id,
         name: 'G-FitLife Master',
@@ -47,13 +48,14 @@ async function seedMasterUser() {
       }, { onConflict: 'email' });
 
       if (profileError) throw profileError;
-      console.log('[CORE-SEED] Perfil Master em "user_profile" garantido.');
+      console.log('[CORE-SEED] Infraestrutura Master pronta para uso.');
     }
   } catch (err) {
-    console.error('[CORE-SEED] Falha na inicialização segura:', err.message);
+    console.error('[CORE-SEED] Falha no processo de seed:', err.message);
   }
 }
 
+// Execução controlada do Seed
 seedMasterUser();
 
 app.use(helmet({
@@ -64,12 +66,43 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// 3. API Administrativa Segura (Usa Service Role para gerenciar Auth)
+// --- ROTAS DE AUTENTICAÇÃO ---
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Login via Supabase Auth
+    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password: password
+    });
+
+    if (error) return res.status(401).json({ error: 'Credenciais inválidas ou acesso negado.' });
+
+    // Busca do perfil para retorno completo
+    const { data: profile } = await supabaseAdmin
+      .from('user_profile')
+      .select('*')
+      .eq('id', data.user.id)
+      .maybeSingle();
+
+    res.status(200).json({ 
+      session: data.session, 
+      user: data.user, 
+      profile 
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Falha interna no servidor de autenticação.' });
+  }
+});
+
+// --- ROTAS ADMINISTRATIVAS ---
+
 app.post('/api/admin/create-user', async (req, res) => {
   try {
     const { email, password, name, role } = req.body;
     
-    // Criação no Auth via Admin Client
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -79,7 +112,6 @@ app.post('/api/admin/create-user', async (req, res) => {
     
     if (authError) return res.status(400).json({ error: authError.message });
 
-    // Inserção no perfil público (tabela user_profile)
     const { error: profileError } = await supabaseAdmin.from('user_profile').insert({
       id: authUser.user.id,
       name,
@@ -90,7 +122,6 @@ app.post('/api/admin/create-user', async (req, res) => {
     });
 
     if (profileError) {
-        // Rollback do usuário auth caso falhe a criação do perfil
         await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
         return res.status(400).json({ error: profileError.message });
     }
