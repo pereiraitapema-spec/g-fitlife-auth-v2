@@ -61,162 +61,140 @@ export const storeService = {
       return { success: true, session, profile: fallbackAdmin, isStaff: true };
     }
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim().toLowerCase(),
-          password: pass
-        });
+    if (!supabase) return { success: false, error: 'Serviço offline' };
 
-        if (!error && data.user) {
-          const profile = await this.getProfileAfterLogin(data.user.id);
-          if (profile) {
-            if (profile.status !== UserStatus.ACTIVE) {
-              return { success: false, error: 'Sua conta está inativa. Contate o administrador.' };
-            }
-            const session = this.createSession(profile);
-            const staffRoles = [
-              UserRole.ADMIN_MASTER, 
-              UserRole.ADMIN_OPERATIONAL, 
-              UserRole.FINANCE, 
-              UserRole.MARKETING, 
-              UserRole.SELLER
-            ];
-            const isStaff = staffRoles.includes(profile.role);
-            return { success: true, session, profile, isStaff };
-          } else {
-             await supabase.auth.signOut();
-             return { success: false, error: 'Perfil não encontrado no sistema G-FitLife.' };
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: pass
+      });
+
+      if (error) return { success: false, error: 'Credenciais inválidas' };
+      if (data.user) {
+        const profile = await this.getProfileAfterLogin(data.user.id);
+        if (profile) {
+          if (profile.status !== UserStatus.ACTIVE) {
+            await supabase.auth.signOut();
+            return { success: false, error: 'Sua conta está inativa' };
           }
-        } else if (error) {
-           return { success: false, error: 'Credenciais inválidas.' };
+          const session = this.createSession(profile);
+          const isStaff = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING, UserRole.SELLER].includes(profile.role);
+          return { success: true, session, profile, isStaff };
         }
-      } catch (err) {
-        console.error("Erro auth remota:", err);
-      }
-    }
-    
-    return { success: false, error: 'Falha na conexão com o servidor de autenticação.' };
-  },
-
-  async toggleFavorite(userId: string, productId: string): Promise<boolean> {
-    if (!supabase) return false;
-    try {
-      const { data: existing } = await supabase
-        .from('user_favorites')
-        .select('*')
-        .eq('userId', userId)
-        .eq('productId', productId)
-        .single();
-
-      if (existing) {
-        await supabase.from('user_favorites').delete().eq('id', existing.id);
-        return false; 
-      } else {
-        await supabase.from('user_favorites').insert({
-          userId,
-          productId,
-          createdAt: new Date().toISOString()
-        });
-        return true; 
       }
     } catch (err) {
-      return false;
+      return { success: false, error: 'Erro de conexão' };
     }
+    return { success: false, error: 'Perfil não encontrado' };
   },
 
-  async getFavorites(userId: string): Promise<Product[]> {
-    if (!supabase) return [];
+  async loginWithGoogle() {
+    if (!supabase) return { success: false, error: 'Indisponível' };
     try {
-      const { data: favs } = await supabase
-        .from('user_favorites')
-        .select('productId')
-        .eq('userId', userId);
-      
-      if (!favs || favs.length === 0) return [];
-      
-      const productIds = favs.map(f => f.productId);
-      const { data: products } = await supabase
-        .from('products')
-        .select('*')
-        .in('id', productIds);
-        
-      return products || [];
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin }
+      });
+      if (error) throw error;
+      return { success: true };
     } catch (err) {
-      return [];
+      return { success: false, error: 'Falha no login social' };
     }
-  },
-
-  async isProductFavorited(userId: string, productId: string): Promise<boolean> {
-    if (!supabase) return false;
-    const { data } = await supabase
-      .from('user_favorites')
-      .select('id')
-      .eq('userId', userId)
-      .eq('productId', productId)
-      .single();
-    return !!data;
   },
 
   async registerAffiliate(data: { name: string, email: string, reason: string }) {
-    if (supabase) {
-      const newAffiliate = {
-        name: data.name,
-        email: data.email.toLowerCase(),
-        role: UserRole.AFFILIATE,
-        status: UserStatus.INACTIVE, 
-        created_at: new Date().toISOString()
-      };
-      
-      const { data: res, error } = await supabase.from('users_profile').insert(newAffiliate).select().single();
-      if (error) throw error;
+    if (!supabase) throw new Error('Supabase não conectado');
+    
+    // Inserir primeiro no perfil (ou atualizar se já existir)
+    const { data: profile, error: pError } = await supabase.from('users_profile').upsert({
+      name: data.name,
+      email: data.email.toLowerCase(),
+      role: UserRole.AFFILIATE,
+      status: UserStatus.INACTIVE,
+      loginType: 'email'
+    }).select().single();
 
-      await supabase.from('affiliates').insert({
-        userId: res.id,
-        name: res.name,
-        email: res.email,
-        status: 'inactive',
-        commissionRate: 15,
-        totalSales: 0,
-        balance: 0,
-        refCode: '' 
-      });
+    if (pError) throw pError;
 
-      return { success: true };
-    }
-    return { success: false };
+    // Inserir na tabela de afiliados
+    const { error: aError } = await supabase.from('affiliates').insert({
+      userId: profile.id,
+      name: data.name,
+      email: data.email.toLowerCase(),
+      status: 'inactive',
+      commissionRate: 15,
+      totalSales: 0,
+      balance: 0,
+      refCode: ''
+    });
+
+    if (aError) throw aError;
+    return { success: true };
   },
 
-  async approveAffiliate(userId: string) {
+  async uploadFile(file: File): Promise<string> {
+    if (!supabase) throw new Error('Supabase não conectado');
+    
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `products/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('uploads')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('uploads')
+      .getPublicUrl(filePath);
+
+    return publicUrl;
+  },
+
+  async saveUser(user: AppUser): Promise<void> {
     if (supabase) {
-      const refCode = 'REF-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-      await supabase.from('users_profile').update({ status: UserStatus.ACTIVE }).eq('id', userId);
-      await supabase.from('affiliates').update({ 
-        status: 'active',
-        refCode: refCode 
-      }).eq('userId', userId);
-      window.dispatchEvent(new Event('usersChanged'));
-      return true;
+      const { error } = await supabase.from('users_profile').upsert(user);
+      if (error) throw error;
     }
-    return false;
+    await dbStore.put('users', user);
+    window.dispatchEvent(new Event('usersChanged'));
+  },
+
+  async saveProduct(p: Product): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('products').upsert(p);
+      if (error) throw error;
+    }
+    await dbStore.put('products', p);
+    window.dispatchEvent(new Event('productsChanged'));
+  },
+
+  async saveOrder(o: Order): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('orders').insert(o);
+      if (error) throw error;
+    }
+    await dbStore.put('orders', o);
+    window.dispatchEvent(new Event('ordersChanged'));
   },
 
   async getProfileAfterLogin(userId: string) {
-     if (!supabase) return null;
-     const { data: profile } = await supabase.from('users_profile').select('*').eq('id', userId).single();
-     if (profile) return profile;
+    if (!supabase) return null;
+    const { data: profile } = await supabase.from('users_profile').select('*').eq('id', userId).single();
+    if (profile) return profile;
 
-     const { data: { user: authUser } } = await supabase.auth.getUser();
-     if (authUser) {
-        const email = authUser.email?.toLowerCase();
-        const { data: allProfiles } = await supabase.from('users_profile').select('*');
-        const found = allProfiles?.find(p => p.email.toLowerCase() === email);
-        if (found) {
-           await supabase.from('users_profile').update({ id: authUser.id }).eq('id', found.id);
-           return { ...found, id: authUser.id };
-        }
-     }
-     return null;
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (authUser) {
+       const email = authUser.email?.toLowerCase();
+       const { data: allProfiles } = await supabase.from('users_profile').select('*');
+       const found = allProfiles?.find(p => p.email.toLowerCase() === email);
+       if (found) {
+          await supabase.from('users_profile').update({ id: authUser.id }).eq('id', found.id);
+          return { ...found, id: authUser.id };
+       }
+    }
+    return null;
   },
 
   async getSettings(): Promise<SystemSettings> {
@@ -230,8 +208,11 @@ export const storeService = {
 
   async saveSettings(settings: SystemSettings): Promise<void> {
     const dataToSave = { ...settings, key: 'geral' };
+    if (supabase) {
+      const { error } = await supabase.from('core_settings').upsert(dataToSave);
+      if (error) throw error;
+    }
     await dbStore.put('config', dataToSave);
-    if (supabase) await supabase.from('core_settings').upsert(dataToSave);
     window.dispatchEvent(new Event('systemSettingsChanged'));
   },
 
@@ -270,12 +251,6 @@ export const storeService = {
     return await dbStore.getAll<AppUser>('users');
   },
 
-  async saveUser(user: AppUser): Promise<void> {
-    await dbStore.put('users', user);
-    if (supabase) await supabase.from('users_profile').upsert(user);
-    window.dispatchEvent(new Event('usersChanged'));
-  },
-
   async updateMyCredentials(userId: string, email: string, password?: string) {
     if (!supabase) return false;
     try {
@@ -305,18 +280,6 @@ export const storeService = {
     return await dbStore.getAll<Order>('orders'); 
   },
 
-  async saveProduct(p: Product): Promise<void> {
-    await dbStore.put('products', p);
-    if (supabase) await supabase.from('products').upsert(p);
-    window.dispatchEvent(new Event('productsChanged'));
-  },
-
-  async saveOrder(o: Order): Promise<void> {
-    await dbStore.put('orders', o);
-    if (supabase) await supabase.from('orders').insert(o);
-    window.dispatchEvent(new Event('ordersChanged'));
-  },
-
   async getAffiliates(): Promise<Affiliate[]> { 
     if (supabase) {
       const { data } = await supabase.from('affiliates').select('*');
@@ -342,7 +305,10 @@ export const storeService = {
   },
 
   async saveBanner(banner: Banner): Promise<void> { 
-    if (supabase) await supabase.from('banners').upsert(banner);
+    if (supabase) {
+      const { error } = await supabase.from('banners').upsert(banner);
+      if (error) throw error;
+    }
     await dbStore.put('banners', banner); 
     window.dispatchEvent(new Event('bannersChanged')); 
   },
@@ -383,7 +349,10 @@ export const storeService = {
   },
 
   async saveDepartment(dept: Department): Promise<void> { 
-    if (supabase) await supabase.from('departments').upsert(dept);
+    if (supabase) {
+      const { error } = await supabase.from('departments').upsert(dept);
+      if (error) throw error;
+    }
     await dbStore.put('departments', dept); 
     window.dispatchEvent(new Event('departmentsChanged')); 
   },
@@ -397,7 +366,10 @@ export const storeService = {
   },
 
   async saveCategory(cat: Category): Promise<void> { 
-    if (supabase) await supabase.from('categories').upsert(cat);
+    if (supabase) {
+      const { error } = await supabase.from('categories').upsert(cat);
+      if (error) throw error;
+    }
     await dbStore.put('categories', cat); 
     window.dispatchEvent(new Event('categoriesChanged')); 
   },
@@ -411,7 +383,10 @@ export const storeService = {
   },
 
   async saveCoupon(coupon: Coupon): Promise<void> { 
-    if (supabase) await supabase.from('coupons').upsert(coupon);
+    if (supabase) {
+      const { error } = await supabase.from('coupons').upsert(coupon);
+      if (error) throw error;
+    }
     await dbStore.put('coupons', coupon); 
     window.dispatchEvent(new Event('couponsChanged')); 
   },
@@ -431,8 +406,6 @@ export const storeService = {
     return await dbStore.getAll<Lead>('leads'); 
   },
 
-  async getSessions(): Promise<UserSession[]> { return await dbStore.getAll<UserSession>('sessions'); },
-  
   getRoles() {
     return [
       { id: UserRole.ADMIN_MASTER, label: 'Admin Master', permissions: [] },
@@ -446,19 +419,11 @@ export const storeService = {
   },
 
   async updateUserStatus(id: string, status: UserStatus): Promise<void> {
-    if (supabase) await supabase.from('users_profile').update({ status }).eq('id', id);
+    if (supabase) {
+      const { error } = await supabase.from('users_profile').update({ status }).eq('id', id);
+      if (error) throw error;
+    }
     window.dispatchEvent(new Event('usersChanged'));
-  },
-
-  async uploadFile(file: File): Promise<string> {
-    if (!supabase) return URL.createObjectURL(file);
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
-    const filePath = `public/${fileName}`;
-    const { error } = await supabase.storage.from('uploads').upload(filePath, file);
-    if (error) throw error;
-    const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filePath);
-    return publicUrl;
   },
 
   async saveConsent(userEmail: string, accepted: boolean): Promise<void> {
@@ -482,9 +447,6 @@ export const storeService = {
     if (id === 'help-overview') return { id, title: 'Hub Enterprise Health', description: 'Visão Geral do Ecossistema.', content: { intro: 'Alta performance híbrida.', architecture: 'Dados distribuídos Supabase/IndexedDB.', features: ['RBAC', 'AI Coach', 'Split de Pagamentos'] }, promptUsed: '', updatedAt: '' };
     return null;
   },
-
-  // FIX: Implement missing methods identified in error logs
-  // --------------------------------------------------------
 
   async updateOrderStatus(id: string, newStatus: OrderStatus): Promise<void> {
     if (supabase) await supabase.from('orders').update({ status: newStatus }).eq('id', id);
@@ -597,7 +559,6 @@ export const storeService = {
     await dbStore.put('backups', backup);
   },
 
-  // Synchronous infrastructure monitoring for UI state initialization
   getInfraMetrics(): InfraMetric {
     return {
       uptime: '14d 6h 22m',
@@ -616,7 +577,6 @@ export const storeService = {
     await dbStore.put('sellers', seller);
   },
 
-  // Synchronous for initial LGPD UI render
   getUserPersonalData(email: string): any {
     return {
       user: { name: 'Usuário G-Fit', email, createdAt: new Date().toISOString() },
@@ -644,7 +604,6 @@ export const storeService = {
     return await dbStore.getAll<LGPDLog>('lgpd_logs');
   },
 
-  // Synchronous for initial PWA UI render
   getPWAMetrics(): any {
     return {
       installs: 124,
@@ -730,6 +689,55 @@ export const storeService = {
 
   async getAILogs(): Promise<AILogEntry[]> {
     return await dbStore.getAll<AILogEntry>('ai_logs');
+  },
+
+  // Added missing methods for favorites and affiliate management
+  async isProductFavorited(userId: string, productId: string): Promise<boolean> {
+    if (supabase) {
+      const { data } = await supabase.from('user_favorites').select('id').eq('userId', userId).eq('productId', productId).maybeSingle();
+      return !!data;
+    }
+    return false;
+  },
+
+  async toggleFavorite(userId: string, productId: string): Promise<boolean> {
+    if (supabase) {
+      const { data: existing } = await supabase.from('user_favorites').select('id').eq('userId', userId).eq('productId', productId).maybeSingle();
+      if (existing) {
+        await supabase.from('user_favorites').delete().eq('id', existing.id);
+        return false;
+      } else {
+        const { error } = await supabase.from('user_favorites').insert({ userId, productId, id: 'fav-' + Date.now() });
+        if (error) throw error;
+        return true;
+      }
+    }
+    return false;
+  },
+
+  async getFavorites(userId: string): Promise<Product[]> {
+    if (supabase) {
+      const { data: favs } = await supabase.from('user_favorites').select('productId').eq('userId', userId);
+      if (!favs || favs.length === 0) return [];
+      const ids = favs.map(f => f.productId);
+      const { data: prods } = await supabase.from('products').select('*').in('id', ids);
+      return prods || [];
+    }
+    return [];
+  },
+
+  async approveAffiliate(userId: string): Promise<void> {
+    if (supabase) {
+      const refCode = 'REF-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+      await supabase.from('users_profile').update({ status: UserStatus.ACTIVE }).eq('id', userId);
+      await supabase.from('affiliates').update({ status: 'active', refCode }).eq('userId', userId);
+    }
+    window.dispatchEvent(new Event('usersChanged'));
+  },
+
+  async getSessions(): Promise<UserSession[]> {
+    const current = this.getActiveSession();
+    return current ? [current] : [];
   },
 
   async saveRole(role: RoleDefinition): Promise<void> {

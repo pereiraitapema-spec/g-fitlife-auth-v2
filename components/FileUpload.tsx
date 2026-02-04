@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { storeService } from '../services/storeService';
 
 interface FileUploadProps {
@@ -14,20 +14,29 @@ const FileUpload: React.FC<FileUploadProps> = ({ currentUrl, onUploadComplete, l
   const [preview, setPreview] = useState(currentUrl);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Sincronizar preview se a URL externa mudar
+  useEffect(() => {
+    setPreview(currentUrl);
+  }, [currentUrl]);
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Preview imediato
+    // Preview imediato local
     const localPreview = URL.createObjectURL(file);
     setPreview(localPreview);
 
     setIsUploading(true);
     try {
+      console.log(`[UPLOAD] Iniciando envio de ${file.name}...`);
       const remoteUrl = await storeService.uploadFile(file);
+      console.log(`[UPLOAD] Sucesso: ${remoteUrl}`);
       onUploadComplete(remoteUrl);
     } catch (error) {
-      alert('Falha no upload: ' + error);
+      console.error("[UPLOAD-ERROR]", error);
+      alert('Falha no upload para o Supabase Storage. Verifique se o bucket "uploads" existe e é público.');
+      setPreview(currentUrl); // Reverter preview em caso de erro
     } finally {
       setIsUploading(false);
     }
@@ -36,8 +45,8 @@ const FileUpload: React.FC<FileUploadProps> = ({ currentUrl, onUploadComplete, l
   return (
     <div className="space-y-3">
       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">{label}</label>
-      <div className="flex items-center gap-6 p-4 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-        <div className={`relative overflow-hidden bg-slate-200 border-2 border-white shadow-sm flex-shrink-0 ${
+      <div className="flex items-center gap-6 p-4 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 hover:border-emerald-300 transition-colors group">
+        <div className={`relative overflow-hidden bg-slate-200 border-2 border-white shadow-sm flex-shrink-0 transition-transform group-hover:scale-105 ${
           circular ? 'w-24 h-24 rounded-full' : 'w-32 h-20 rounded-2xl'
         }`}>
           <img src={preview || 'https://via.placeholder.com/150'} className="w-full h-full object-cover" alt="Preview" />
@@ -49,13 +58,14 @@ const FileUpload: React.FC<FileUploadProps> = ({ currentUrl, onUploadComplete, l
         </div>
         
         <div className="flex-1 space-y-2">
-          <p className="text-[10px] font-bold text-slate-500 uppercase">JPG, PNG ou WEBP</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase">JPG, PNG ou WEBP (Máx 5MB)</p>
           <button 
             type="button"
+            disabled={isUploading}
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all active:scale-95"
+            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all active:scale-95 disabled:opacity-50"
           >
-            Escolher Arquivo
+            {isUploading ? 'ENVIANDO...' : 'ESCOLHER DO PC'}
           </button>
           <input 
             type="file" 

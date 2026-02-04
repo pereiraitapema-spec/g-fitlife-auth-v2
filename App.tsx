@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import HeaderSimple from './components/HeaderSimple';
@@ -217,7 +218,13 @@ const App: React.FC = () => {
           <div className="text-center space-y-6">
             <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl shadow-emerald-500/20">G</div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">G-Fit Hub Login</h1>
-            {authError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase border border-red-100">{authError}</div>}
+            
+            {authError && (
+              <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase border border-red-100 animate-bounce">
+                {authError}
+              </div>
+            )}
+
             <form onSubmit={handleLogin} className="space-y-4 pt-4 text-left">
                <div className="space-y-1">
                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">E-mail Corporativo</label>
@@ -229,7 +236,23 @@ const App: React.FC = () => {
                </div>
                <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all shadow-xl active:scale-95">Autenticar agora</button>
             </form>
-            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline">Voltar para a vitrine pública</button>
+
+            <div className="relative py-4">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+              <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest"><span className="bg-white px-4 text-slate-400">ou entre com</span></div>
+            </div>
+
+            <button 
+              type="button"
+              disabled={isLoggingIn}
+              onClick={() => storeService.loginWithGoogle()} 
+              className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+            >
+              <img src="https://img.icons8.com/color/24/google-logo.png" alt="Google" className="w-5 h-5" />
+              Continuar com Google
+            </button>
+
+            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline mt-4 block mx-auto">Voltar para a vitrine pública</button>
           </div>
         </div>
       </div>
