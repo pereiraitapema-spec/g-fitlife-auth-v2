@@ -109,22 +109,20 @@ export const storeService = {
   async getProfileAfterLogin(userId: string) {
     if (!supabase) return null;
     
-    // 1. Tentar busca direta pelo UUID
-    const { data: profileByUid } = await supabase.from('users_profile').select('*').eq('id', userId).maybeSingle();
+    // CORREÇÃO: Tabela 'user_profile'
+    const { data: profileByUid } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
     if (profileByUid) return profileByUid;
 
-    // 2. Se não achou pelo UID, verificar se o e-mail do Auth existe na tabela de perfis (Fusão de Contas)
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (authUser?.email) {
       const email = authUser.email.toLowerCase();
-      const { data: profileByEmail } = await supabase.from('users_profile').select('*').eq('email', email).maybeSingle();
+      // CORREÇÃO: Tabela 'user_profile'
+      const { data: profileByEmail } = await supabase.from('user_profile').select('*').eq('email', email).maybeSingle();
       
       if (profileByEmail) {
-        // Vincula o UUID da autenticação (E-mail/Senha ou Google) ao perfil existente
-        await supabase.from('users_profile').update({ id: authUser.id, loginType: 'hybrid' }).eq('email', email);
+        await supabase.from('user_profile').update({ id: authUser.id, loginType: 'hybrid' }).eq('email', email);
         return { ...profileByEmail, id: authUser.id, loginType: 'hybrid' };
       } else {
-        // Se for um login totalmente novo, cria o perfil automaticamente
         const newProfile = {
           id: authUser.id,
           email: email,
@@ -134,7 +132,8 @@ export const storeService = {
           loginType: 'hybrid',
           created_at: new Date().toISOString()
         };
-        const { data: created } = await supabase.from('users_profile').insert(newProfile).select().single();
+        // CORREÇÃO: Tabela 'user_profile'
+        const { data: created } = await supabase.from('user_profile').insert(newProfile).select().single();
         return created;
       }
     }
@@ -145,7 +144,8 @@ export const storeService = {
     if (!supabase) throw new Error('Supabase não conectado');
     
     try {
-      const { data: profile, error: pError } = await supabase.from('users_profile').upsert({
+      // CORREÇÃO: Tabela 'user_profile'
+      const { data: profile, error: pError } = await supabase.from('user_profile').upsert({
         name: data.name,
         email: data.email.toLowerCase(),
         role: UserRole.AFFILIATE,
@@ -176,12 +176,25 @@ export const storeService = {
 
   async uploadFile(file: File): Promise<string> {
     if (!supabase) throw new Error('Offline');
+    
     const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const filePath = `products/${fileName}`;
-    const { error } = await supabase.storage.from('uploads').upload(filePath, file);
-    if (error) throw error;
-    const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filePath);
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `public/${fileName}`;
+
+    // Upload para o bucket "uploads"
+    const { error: uploadError } = await supabase.storage
+      .from('uploads')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('uploads')
+      .getPublicUrl(filePath);
+
     return publicUrl;
   },
 
@@ -189,15 +202,15 @@ export const storeService = {
     if (supabase) {
       const payload = { 
         ...user, 
-        loginType: 'hybrid' // Força o tipo híbrido para que novos perfis aceitem qualquer método
+        loginType: 'hybrid' 
       };
       
-      // Removemos o ID se for um novo cadastro fake para deixar o Supabase gerar o UUID se necessário
       if (payload.id && (payload.id.startsWith('temp') || payload.id.includes('sess'))) {
           delete (payload as any).id;
       }
       
-      const { error } = await supabase.from('users_profile').upsert(payload, { onConflict: 'email' });
+      // CORREÇÃO: Tabela 'user_profile'
+      const { error } = await supabase.from('user_profile').upsert(payload, { onConflict: 'email' });
       if (error) throw error;
     }
     await dbStore.put('users', user);
@@ -270,7 +283,8 @@ export const storeService = {
 
   async getUsers(): Promise<AppUser[]> {
     if (supabase) {
-      const { data } = await supabase.from('users_profile').select('*').order('created_at', { ascending: false });
+      // CORREÇÃO: Tabela 'user_profile'
+      const { data } = await supabase.from('user_profile').select('*').order('created_at', { ascending: false });
       return data || [];
     }
     return await dbStore.getAll<AppUser>('users');
@@ -445,7 +459,8 @@ export const storeService = {
 
   async updateUserStatus(id: string, status: UserStatus): Promise<void> {
     if (supabase) {
-      const { error } = await supabase.from('users_profile').update({ status }).eq('id', id);
+      // CORREÇÃO: Tabela 'user_profile'
+      const { error } = await supabase.from('user_profile').update({ status }).eq('id', id);
       if (error) throw error;
     }
     window.dispatchEvent(new Event('usersChanged'));
@@ -691,7 +706,8 @@ export const storeService = {
   async approveAffiliate(userId: string): Promise<void> {
     if (supabase) {
       const refCode = 'REF-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-      await supabase.from('users_profile').update({ status: UserStatus.ACTIVE, loginType: 'hybrid' }).eq('id', userId);
+      // CORREÇÃO: Tabela 'user_profile'
+      await supabase.from('user_profile').update({ status: UserStatus.ACTIVE, loginType: 'hybrid' }).eq('id', userId);
       await supabase.from('affiliates').update({ status: 'active', refCode }).eq('userId', userId);
     }
     window.dispatchEvent(new Event('usersChanged'));

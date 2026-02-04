@@ -1,3 +1,4 @@
+
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
@@ -9,16 +10,18 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 1. Seed Automático do Usuário Master (Utiliza ENV para não expor senhas)
+// 1. Seed Automático do Usuário Master (Utiliza SERVICE_ROLE via supabaseAdmin)
 async function seedMasterUser() {
   try {
     const email = process.env.MASTER_EMAIL || 'admin@system.local';
     const password = process.env.MASTER_PASSWORD || 'admin123';
 
-    console.log('[CORE-SEED] Validando Usuário Master no Supabase Auth...');
+    console.log('[CORE-SEED] Validando Usuário Master via Service Role...');
     
-    const { data: userByEmail } = await supabaseAdmin.auth.admin.listUsers();
-    let targetUser = userByEmail.users.find(u => u.email === email);
+    const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    if (listError) throw listError;
+
+    let targetUser = usersData.users.find(u => u.email === email);
 
     if (!targetUser) {
       console.log('[CORE-SEED] Criando novo Master no Auth...');
@@ -33,18 +36,18 @@ async function seedMasterUser() {
     }
 
     if (targetUser) {
-      // ATUALIZADO: Usando tabela 'users_profile' conforme solicitado
-      const { error: profileError } = await supabaseAdmin.from('users_profile').upsert({
+      // CORREÇÃO: Tabela 'user_profile' (singular)
+      const { error: profileError } = await supabaseAdmin.from('user_profile').upsert({
         id: targetUser.id,
         name: 'G-FitLife Master',
         email,
         role: 'admin_master',
         status: 'active',
         created_at: new Date().toISOString()
-      });
+      }, { onConflict: 'email' });
 
       if (profileError) throw profileError;
-      console.log('[CORE-SEED] Perfil Master em "users_profile" garantido.');
+      console.log('[CORE-SEED] Perfil Master em "user_profile" garantido.');
     }
   } catch (err) {
     console.error('[CORE-SEED] Falha na inicialização segura:', err.message);
@@ -61,19 +64,23 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// 3. API Administrativa Segura
+// 3. API Administrativa Segura (Usa Service Role para gerenciar Auth)
 app.post('/api/admin/create-user', async (req, res) => {
   try {
     const { email, password, name, role } = req.body;
+    
+    // Criação no Auth via Admin Client
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
       user_metadata: { role }
     });
+    
     if (authError) return res.status(400).json({ error: authError.message });
 
-    const { error: profileError } = await supabaseAdmin.from('users_profile').insert({
+    // Inserção no perfil público (tabela user_profile)
+    const { error: profileError } = await supabaseAdmin.from('user_profile').insert({
       id: authUser.user.id,
       name,
       email,
@@ -81,7 +88,12 @@ app.post('/api/admin/create-user', async (req, res) => {
       status: 'active',
       created_at: new Date().toISOString()
     });
-    if (profileError) return res.status(400).json({ error: profileError.message });
+
+    if (profileError) {
+        // Rollback do usuário auth caso falhe a criação do perfil
+        await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+        return res.status(400).json({ error: profileError.message });
+    }
 
     res.status(201).json({ status: 'ok', userId: authUser.user.id });
   } catch (err) {
@@ -101,7 +113,7 @@ app.delete('/api/admin/delete-user', async (req, res) => {
     }
 
     await supabaseAdmin.auth.admin.deleteUser(userId);
-    await supabaseAdmin.from('users_profile').delete().eq('id', userId);
+    await supabaseAdmin.from('user_profile').delete().eq('id', userId);
 
     res.status(200).json({ status: 'ok' });
   } catch (err) {
