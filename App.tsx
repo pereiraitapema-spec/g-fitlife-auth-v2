@@ -26,7 +26,7 @@ import CustomerPortal from './pages/CustomerPortal';
 import AICoach from './components/AICoach';
 import LGPDBanner from './components/LGPDBanner';
 
-// Modulos Adicionais (Auditados)
+// Modulos Adicionais
 import MarketingBanners from './pages/MarketingBanners';
 import MarketingRemarketing from './pages/MarketingRemarketing';
 import MarketingChatIA from './pages/MarketingChatIA';
@@ -203,7 +203,7 @@ const App: React.FC = () => {
     );
   }
 
-  // Admin View Login Protection
+  // Proteção de Login para Painel Admin
   if (viewMode === 'admin' && !session) {
     return (
       <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
@@ -243,7 +243,7 @@ const App: React.FC = () => {
       {viewMode === 'store' ? (
         <div className="min-h-screen bg-white flex flex-col relative w-full overflow-y-auto custom-scrollbar">
            <PublicHeader onNavigate={handleNavigate} cartCount={cart.length} onOpenCoach={() => setIsCoachOpen(true)} onSwitchMode={() => setViewMode('admin')} user={session} />
-           <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-12">
+           <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-12 relative">
               {currentRoute === 'public-home' && <PublicHome onNavigate={handleNavigate} onAddToCart={p => setCart([...cart, p])} />}
               {currentRoute === 'departments' && <PublicDepartments onNavigate={handleNavigate} />}
               {currentRoute === 'store-catalog' && <PublicCatalog onBuy={() => handleNavigate('checkout')} />}
