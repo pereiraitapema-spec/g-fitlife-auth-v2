@@ -113,25 +113,25 @@ export const storeService = {
     const { data: profileByUid } = await supabase.from('users_profile').select('*').eq('id', userId).maybeSingle();
     if (profileByUid) return profileByUid;
 
-    // 2. Se não achou pelo UID, verificar se o e-mail do Auth existe na tabela de perfis
+    // 2. Se não achou pelo UID, verificar se o e-mail do Auth existe na tabela de perfis (Fusão de Contas)
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (authUser?.email) {
       const email = authUser.email.toLowerCase();
       const { data: profileByEmail } = await supabase.from('users_profile').select('*').eq('email', email).maybeSingle();
       
       if (profileByEmail) {
-        // Vincula o UUID do Google ao perfil existente se for o primeiro login social
-        await supabase.from('users_profile').update({ id: authUser.id }).eq('email', email);
-        return { ...profileByEmail, id: authUser.id };
+        // Vincula o UUID da autenticação (E-mail/Senha ou Google) ao perfil existente
+        await supabase.from('users_profile').update({ id: authUser.id, loginType: 'hybrid' }).eq('email', email);
+        return { ...profileByEmail, id: authUser.id, loginType: 'hybrid' };
       } else {
-        // Se for um login Google totalmente novo (cliente final), cria o perfil automaticamente
+        // Se for um login totalmente novo, cria o perfil automaticamente
         const newProfile = {
           id: authUser.id,
           email: email,
           name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'Novo Usuário G-Fit',
           role: UserRole.CUSTOMER,
           status: UserStatus.ACTIVE,
-          loginType: 'google',
+          loginType: 'hybrid',
           created_at: new Date().toISOString()
         };
         const { data: created } = await supabase.from('users_profile').insert(newProfile).select().single();
@@ -150,7 +150,7 @@ export const storeService = {
         email: data.email.toLowerCase(),
         role: UserRole.AFFILIATE,
         status: UserStatus.INACTIVE,
-        loginType: 'email'
+        loginType: 'hybrid'
       }, { onConflict: 'email' }).select().single();
 
       if (pError) throw pError;
@@ -187,10 +187,16 @@ export const storeService = {
 
   async saveUser(user: AppUser): Promise<void> {
     if (supabase) {
-      const payload = { ...user };
+      const payload = { 
+        ...user, 
+        loginType: 'hybrid' // Força o tipo híbrido para que novos perfis aceitem qualquer método
+      };
+      
+      // Removemos o ID se for um novo cadastro fake para deixar o Supabase gerar o UUID se necessário
       if (payload.id && (payload.id.startsWith('temp') || payload.id.includes('sess'))) {
           delete (payload as any).id;
       }
+      
       const { error } = await supabase.from('users_profile').upsert(payload, { onConflict: 'email' });
       if (error) throw error;
     }
@@ -685,7 +691,7 @@ export const storeService = {
   async approveAffiliate(userId: string): Promise<void> {
     if (supabase) {
       const refCode = 'REF-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-      await supabase.from('users_profile').update({ status: UserStatus.ACTIVE }).eq('id', userId);
+      await supabase.from('users_profile').update({ status: UserStatus.ACTIVE, loginType: 'hybrid' }).eq('id', userId);
       await supabase.from('affiliates').update({ status: 'active', refCode }).eq('userId', userId);
     }
     window.dispatchEvent(new Event('usersChanged'));

@@ -89,7 +89,7 @@ export interface AppUser {
   password?: string;
   googleId?: string;
   isDefaultPassword?: boolean;
-  loginType: 'google' | 'email';
+  loginType?: 'google' | 'email' | 'hybrid';
 }
 
 export interface SystemSettings {

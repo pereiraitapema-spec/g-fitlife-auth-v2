@@ -16,7 +16,7 @@ const CoreUsers: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [formData, setFormData] = useState<Partial<AppUser>>({ 
-    id: '', name: '', email: '', role: UserRole.CUSTOMER, status: UserStatus.ACTIVE, loginType: 'email'
+    id: '', name: '', email: '', role: UserRole.CUSTOMER, status: UserStatus.ACTIVE
   });
 
   const [adminFormData, setAdminFormData] = useState({
@@ -70,13 +70,12 @@ const CoreUsers: React.FC = () => {
     
     try {
       const userData: AppUser = {
-        // Se for edição, mantém o ID. Se for novo, gera um ID temporário que o service cuidará
         id: formData.id || 'temp-' + Date.now(),
         name: formData.name || '',
         email: formData.email || '',
         role: formData.role as UserRole,
         status: formData.status as UserStatus,
-        loginType: formData.loginType as any,
+        loginType: 'hybrid', // Qualquer usuário criado pode usar E-mail/Senha ou Google
         googleId: formData.googleId || '',
         createdAt: formData.createdAt || new Date().toISOString(),
       };
@@ -84,7 +83,7 @@ const CoreUsers: React.FC = () => {
       await storeService.saveUser(userData);
       await loadData(); 
       setIsModalOpen(false);
-      showFeedback("Perfil atualizado no banco.");
+      showFeedback("Perfil unificado atualizado.");
     } catch (error: any) {
       console.error("Erro no formulário:", error);
       showFeedback("Erro ao salvar: " + (error.message || "Falha na rede"), "error");
@@ -127,7 +126,7 @@ const CoreUsers: React.FC = () => {
 
       try {
         await storeService.deleteAdminUser(userToDelete);
-        showFeedback("Usuário excluído do Auth/DB!");
+        showFeedback("Usuário removido da infraestrutura!");
         await loadData();
       } catch (err: any) {
         showFeedback(err.message, "error");
@@ -156,7 +155,7 @@ const CoreUsers: React.FC = () => {
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md">
           <div className="bg-white rounded-[50px] shadow-2xl p-12 text-center max-w-sm w-full">
             <h3 className="text-2xl font-black mb-6 uppercase tracking-tight">Remover Acesso?</h3>
-            <p className="text-slate-500 mb-10 text-sm leading-relaxed">Esta ação é irreversível no Supabase Auth e Banco de Dados.</p>
+            <p className="text-slate-500 mb-10 text-sm leading-relaxed">Esta ação exclui o perfil e o acesso no Supabase Auth.</p>
             <div className="flex gap-4">
               <button onClick={handleDelete} className="flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase shadow-xl shadow-red-500/20 active:scale-95 transition-all">EXCLUIR</button>
               <button onClick={() => setIsConfirmDeleteOpen(false)} className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-xs uppercase text-slate-400">CANCELAR</button>
@@ -168,7 +167,7 @@ const CoreUsers: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-end gap-6 px-4">
         <div>
           <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">Colaboradores</h2>
-          <p className="text-slate-500 text-lg font-medium">Persistência real no Supabase com Auditoria Master.</p>
+          <p className="text-slate-500 text-lg font-medium">Gestão de identidades híbridas (E-mail ou Google SSO).</p>
         </div>
         <div className="flex gap-4">
            {isMaster && (
@@ -181,12 +180,12 @@ const CoreUsers: React.FC = () => {
            )}
            <button 
              onClick={() => { 
-                setFormData({ id: '', name: '', email: '', role: UserRole.CUSTOMER, status: UserStatus.ACTIVE, loginType: 'email' }); 
+                setFormData({ id: '', name: '', email: '', role: UserRole.CUSTOMER, status: UserStatus.ACTIVE }); 
                 setIsModalOpen(true); 
              }} 
              className="px-10 py-5 bg-slate-900 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-emerald-500 transition-all"
            >
-             + NOVO CADASTRO
+             + NOVO REGISTRO
            </button>
         </div>
       </div>
@@ -198,6 +197,7 @@ const CoreUsers: React.FC = () => {
               <tr>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Usuário</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Tipo / Cargo</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Acesso Híbrido</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Ações</th>
               </tr>
@@ -228,6 +228,13 @@ const CoreUsers: React.FC = () => {
                      ) : (
                         <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${u.role === UserRole.ADMIN_MASTER ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>{getRoleLabel(u.role)}</span>
                      )}
+                  </td>
+                  <td className="px-8 py-6 text-center">
+                     <div className="flex items-center justify-center gap-2">
+                        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg uppercase tracking-tighter">E-mail + Senha</span>
+                        <span className="text-slate-300">/</span>
+                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-lg uppercase tracking-tighter">Google SSO</span>
+                     </div>
                   </td>
                   <td className="px-8 py-6 text-center">
                     <span className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${u.status === UserStatus.ACTIVE ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>{u.status === UserStatus.ACTIVE ? '● Ativo' : '● Suspenso'}</span>
@@ -297,11 +304,11 @@ const CoreUsers: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Login Via</label>
-                    <select value={formData.loginType} onChange={e => setFormData({...formData, loginType: e.target.value as any})} className="w-full bg-slate-50 rounded-[20px] p-5 font-bold outline-none shadow-inner">
-                      <option value="email">E-mail e Senha</option>
-                      <option value="google">Google SSO</option>
-                    </select>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Tipo de Perfil</label>
+                    <div className="p-5 bg-emerald-50 rounded-[20px] border border-emerald-100 flex items-center gap-3">
+                       <span className="text-emerald-600">🛡️</span>
+                       <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Identidade Híbrida Ativa</span>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Status da Conta</label>
@@ -311,6 +318,7 @@ const CoreUsers: React.FC = () => {
                     </select>
                   </div>
                 </div>
+                <p className="text-[10px] text-slate-400 font-medium italic px-4">Nota: O usuário poderá acessar via senha ou Google SSO indiferente do cadastro inicial.</p>
                 <div className="flex gap-4 pt-10 sticky bottom-0 bg-white">
                   <button type="submit" disabled={isSubmitting} className="flex-1 py-6 bg-slate-900 text-white rounded-[28px] font-black text-sm uppercase shadow-xl active:scale-95 transition-all">{isSubmitting ? 'SINCRONIZANDO...' : 'SALVAR NO SUPABASE'}</button>
                   <button type="button" onClick={() => setIsModalOpen(false)} className="px-10 py-6 bg-slate-100 text-slate-400 rounded-[28px] font-black text-sm uppercase transition-all">FECHAR</button>
