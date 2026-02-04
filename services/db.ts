@@ -1,3 +1,4 @@
+
 /**
  * GFITLIFE INDEXED-DB WRAPPER V3.0
  * Objetivo: Fonte única de verdade para persistência local (cache) do ecossistema.
@@ -5,7 +6,8 @@
  */
 
 const DB_NAME = 'gfitlife_db_v3';
-const DB_VERSION = 3;
+// Incrementing version to add new stores for full feature support
+const DB_VERSION = 4;
 
 /**
  * Inicializa o banco de dados local.
@@ -23,7 +25,8 @@ export const initDB = (): Promise<IDBDatabase> => {
         'deploys', 'backups', 'consents', 'lgpd_logs', 'pwa_notifications', 
         'sync_logs', 'wa_messages', 'ai_recommendations', 'ai_automations', 
         'ai_logs', 'ai_predictions', 'gateways', 'transactions', 'carriers', 
-        'deliveries', 'departments', 'categories', 'performance_metrics', 'roles'
+        'deliveries', 'departments', 'categories', 'performance_metrics', 'roles',
+        'remarketing_logs', 'email_templates'
       ];
       
       stores.forEach(store => {

@@ -58,11 +58,11 @@ const PublicHeader: React.FC<PublicHeaderProps> = ({ onNavigate, cartCount, onOp
           <button onClick={() => onNavigate('departments')} className="text-xs font-bold text-slate-600 hover:text-emerald-500 transition-colors uppercase tracking-widest">Departamentos</button>
           <button onClick={() => onNavigate('store-catalog')} className="text-xs font-bold text-slate-600 hover:text-emerald-500 transition-colors uppercase tracking-widest">Produtos</button>
           
-          {/* Menu Afiliados Inteligente */}
+          {/* Menu Afiliados Dinâmico */}
           <button 
             onClick={() => isAffiliate ? onNavigate('affiliate-portal') : onNavigate('affiliate-register')} 
             className={`text-xs font-black uppercase tracking-widest transition-all px-4 py-2 rounded-xl flex items-center gap-2 ${
-              isAffiliate ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'text-slate-600 hover:text-emerald-500'
+              isAffiliate ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100' : 'text-slate-600 hover:text-emerald-500'
             }`}
           >
             {isAffiliate ? (
@@ -71,7 +71,7 @@ const PublicHeader: React.FC<PublicHeaderProps> = ({ onNavigate, cartCount, onOp
                 Meu Portal Afiliado
               </>
             ) : (
-              'Seja um Afiliado'
+              'Afiliados'
             )}
           </button>
 

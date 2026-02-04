@@ -144,6 +144,9 @@ const App: React.FC = () => {
         const newSession = storeService.createSession(profile);
         setSession(newSession);
         handleRoleLanding(profile.role);
+      } else if (profile && profile.status === UserStatus.INACTIVE) {
+        setAuthError('Sua conta está aguardando aprovação master.');
+        await supabase.auth.signOut();
       }
     }
   };
@@ -156,7 +159,10 @@ const App: React.FC = () => {
     };
     init();
 
-    const handleSessionChange = () => setSession(storeService.getActiveSession());
+    const handleSessionChange = () => {
+      const s = storeService.getActiveSession();
+      setSession(s);
+    };
     window.addEventListener('sessionUpdated', handleSessionChange);
     return () => window.removeEventListener('sessionUpdated', handleSessionChange);
   }, []);
@@ -203,7 +209,7 @@ const App: React.FC = () => {
     );
   }
 
-  // Proteção de Login para Painel Admin
+  // Admin View Login Protection
   if (viewMode === 'admin' && !session) {
     return (
       <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
@@ -232,9 +238,10 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden relative">
+      {/* Feedback Overlay - Garantindo que não bloqueie nada se não estiver ativo */}
       {feedback && (
-        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-10">
-          <div className={`px-12 py-5 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest ${feedback.type === 'error' ? 'bg-red-900' : 'bg-slate-900'}`}>
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-10 pointer-events-none">
+          <div className={`px-12 py-5 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest pointer-events-auto ${feedback.type === 'error' ? 'bg-red-900' : 'bg-slate-900'}`}>
             {feedback.message}
           </div>
         </div>
