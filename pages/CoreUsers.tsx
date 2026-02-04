@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { storeService } from '../services/storeService';
 import { AppUser, UserRole, UserStatus } from '../types';
@@ -69,7 +70,8 @@ const CoreUsers: React.FC = () => {
     
     try {
       const userData: AppUser = {
-        id: formData.id || 'u-' + Date.now(),
+        // Se for edição, mantém o ID. Se for novo, gera um ID temporário que o service cuidará
+        id: formData.id || 'temp-' + Date.now(),
         name: formData.name || '',
         email: formData.email || '',
         role: formData.role as UserRole,
@@ -83,8 +85,9 @@ const CoreUsers: React.FC = () => {
       await loadData(); 
       setIsModalOpen(false);
       showFeedback("Perfil atualizado no banco.");
-    } catch (error) {
-      showFeedback("Erro ao salvar: " + error, "error");
+    } catch (error: any) {
+      console.error("Erro no formulário:", error);
+      showFeedback("Erro ao salvar: " + (error.message || "Falha na rede"), "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -126,7 +129,7 @@ const CoreUsers: React.FC = () => {
         await storeService.deleteAdminUser(userToDelete);
         showFeedback("Usuário excluído do Auth/DB!");
         await loadData();
-      } catch (err) {
+      } catch (err: any) {
         showFeedback(err.message, "error");
       }
       setIsConfirmDeleteOpen(false);
@@ -177,7 +180,10 @@ const CoreUsers: React.FC = () => {
              </button>
            )}
            <button 
-             onClick={() => { setFormData({ role: UserRole.CUSTOMER }); setIsModalOpen(true); }} 
+             onClick={() => { 
+                setFormData({ id: '', name: '', email: '', role: UserRole.CUSTOMER, status: UserStatus.ACTIVE, loginType: 'email' }); 
+                setIsModalOpen(true); 
+             }} 
              className="px-10 py-5 bg-slate-900 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-emerald-500 transition-all"
            >
              + NOVO CADASTRO

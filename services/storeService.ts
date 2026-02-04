@@ -105,31 +105,37 @@ export const storeService = {
   async registerAffiliate(data: { name: string, email: string, reason: string }) {
     if (!supabase) throw new Error('Supabase não conectado');
     
-    // Inserir primeiro no perfil (ou atualizar se já existir)
-    const { data: profile, error: pError } = await supabase.from('users_profile').upsert({
-      name: data.name,
-      email: data.email.toLowerCase(),
-      role: UserRole.AFFILIATE,
-      status: UserStatus.INACTIVE,
-      loginType: 'email'
-    }).select().single();
+    try {
+      // 1. Upsert no perfil para garantir que o usuário existe como INACTIVE e papel AFFILIATE
+      // Usamos onConflict 'email' para não quebrar se o email já estiver cadastrado
+      const { data: profile, error: pError } = await supabase.from('users_profile').upsert({
+        name: data.name,
+        email: data.email.toLowerCase(),
+        role: UserRole.AFFILIATE,
+        status: UserStatus.INACTIVE,
+        loginType: 'email'
+      }, { onConflict: 'email' }).select().single();
 
-    if (pError) throw pError;
+      if (pError) throw pError;
 
-    // Inserir na tabela de afiliados
-    const { error: aError } = await supabase.from('affiliates').insert({
-      userId: profile.id,
-      name: data.name,
-      email: data.email.toLowerCase(),
-      status: 'inactive',
-      commissionRate: 15,
-      totalSales: 0,
-      balance: 0,
-      refCode: ''
-    });
+      // 2. Upsert na tabela de afiliados vinculando ao ID do perfil gerado/encontrado
+      const { error: aError } = await supabase.from('affiliates').upsert({
+        userId: profile.id,
+        name: data.name,
+        email: data.email.toLowerCase(),
+        status: 'inactive',
+        commissionRate: 15,
+        totalSales: 0,
+        balance: 0,
+        refCode: ''
+      }, { onConflict: 'userId' });
 
-    if (aError) throw aError;
-    return { success: true };
+      if (aError) throw aError;
+      return { success: true };
+    } catch (err) {
+      console.error("Erro crítico no registro de afiliado:", err);
+      throw err;
+    }
   },
 
   async uploadFile(file: File): Promise<string> {
@@ -154,8 +160,17 @@ export const storeService = {
 
   async saveUser(user: AppUser): Promise<void> {
     if (supabase) {
-      const { error } = await supabase.from('users_profile').upsert(user);
-      if (error) throw error;
+      // Removemos o ID se for um novo cadastro fake para deixar o Supabase gerar o UUID se necessário
+      const payload = { ...user };
+      if (payload.id && (payload.id.startsWith('u-') || payload.id.includes('temp'))) {
+          delete (payload as any).id;
+      }
+      
+      const { error } = await supabase.from('users_profile').upsert(payload, { onConflict: 'email' });
+      if (error) {
+          console.error("Erro ao salvar usuário no Supabase:", error);
+          throw error;
+      }
     }
     await dbStore.put('users', user);
     window.dispatchEvent(new Event('usersChanged'));
@@ -164,7 +179,10 @@ export const storeService = {
   async saveProduct(p: Product): Promise<void> {
     if (supabase) {
       const { error } = await supabase.from('products').upsert(p);
-      if (error) throw error;
+      if (error) {
+          console.error("Erro ao salvar produto no Supabase:", error);
+          throw error;
+      }
     }
     await dbStore.put('products', p);
     window.dispatchEvent(new Event('productsChanged'));
@@ -245,7 +263,7 @@ export const storeService = {
 
   async getUsers(): Promise<AppUser[]> {
     if (supabase) {
-      const { data } = await supabase.from('users_profile').select('*');
+      const { data } = await supabase.from('users_profile').select('*').order('created_at', { ascending: false });
       return data || [];
     }
     return await dbStore.getAll<AppUser>('users');
@@ -691,7 +709,6 @@ export const storeService = {
     return await dbStore.getAll<AILogEntry>('ai_logs');
   },
 
-  // Added missing methods for favorites and affiliate management
   async isProductFavorited(userId: string, productId: string): Promise<boolean> {
     if (supabase) {
       const { data } = await supabase.from('user_favorites').select('id').eq('userId', userId).eq('productId', productId).maybeSingle();
