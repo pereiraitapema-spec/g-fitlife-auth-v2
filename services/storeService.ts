@@ -136,14 +136,14 @@ export const storeService = {
 
       if (existing) {
         await supabase.from('user_favorites').delete().eq('id', existing.id);
-        return false; // Removido
+        return false; 
       } else {
         await supabase.from('user_favorites').insert({
           userId,
           productId,
           createdAt: new Date().toISOString()
         });
-        return true; // Adicionado
+        return true; 
       }
     } catch (err) {
       return false;
@@ -265,20 +265,15 @@ export const storeService = {
 
   async getProfileAfterLogin(userId: string) {
      if (!supabase) return null;
-
-     // 1. Tentar buscar pelo ID (Padrão Supabase Auth)
      const { data: profile } = await supabase.from('users_profile').select('*').eq('id', userId).single();
      if (profile) return profile;
 
-     // 2. Se não encontrar pelo ID, buscar pelo E-mail (Fluxo OAuth para usuários pré-cadastrados)
      const { data: { user: authUser } } = await supabase.auth.getUser();
      if (authUser) {
         const email = authUser.email?.toLowerCase();
         const { data: allProfiles } = await supabase.from('users_profile').select('*');
         const found = allProfiles?.find(p => p.email.toLowerCase() === email);
-        
         if (found) {
-           // Sincroniza o ID da tabela de perfis com o ID do Auth do Supabase
            await supabase.from('users_profile').update({ id: authUser.id }).eq('id', found.id);
            return { ...found, id: authUser.id };
         }
@@ -287,6 +282,10 @@ export const storeService = {
   },
 
   async getSettings(): Promise<SystemSettings> {
+    if (supabase) {
+      const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').single();
+      if (data) return data as SystemSettings;
+    }
     const data = await dbStore.getByKey<any>('config', 'geral');
     return data as SystemSettings;
   },
@@ -380,9 +379,27 @@ export const storeService = {
     }
     return await dbStore.getAll<Order>('orders'); 
   },
-  async getDepartments(): Promise<Department[]> { return await dbStore.getAll<Department>('departments'); },
-  async getCategories(): Promise<Category[]> { return await dbStore.getAll<Category>('categories'); },
-  async getCoupons(): Promise<Coupon[]> { return await dbStore.getAll<Coupon>('coupons'); },
+  async getDepartments(): Promise<Department[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('departments').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Department>('departments'); 
+  },
+  async getCategories(): Promise<Category[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('categories').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Category>('categories'); 
+  },
+  async getCoupons(): Promise<Coupon[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('coupons').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Coupon>('coupons'); 
+  },
 
   getRoles() {
     return [
@@ -401,9 +418,21 @@ export const storeService = {
     window.dispatchEvent(new Event('usersChanged'));
   },
 
-  async saveDepartment(dept: Department): Promise<void> { await dbStore.put('departments', dept); window.dispatchEvent(new Event('departmentsChanged')); },
-  async saveCategory(cat: Category): Promise<void> { await dbStore.put('categories', cat); window.dispatchEvent(new Event('categoriesChanged')); },
-  async saveCoupon(coupon: Coupon): Promise<void> { await dbStore.put('coupons', coupon); window.dispatchEvent(new Event('couponsChanged')); },
+  async saveDepartment(dept: Department): Promise<void> { 
+    if (supabase) await supabase.from('departments').upsert(dept);
+    await dbStore.put('departments', dept); 
+    window.dispatchEvent(new Event('departmentsChanged')); 
+  },
+  async saveCategory(cat: Category): Promise<void> { 
+    if (supabase) await supabase.from('categories').upsert(cat);
+    await dbStore.put('categories', cat); 
+    window.dispatchEvent(new Event('categoriesChanged')); 
+  },
+  async saveCoupon(coupon: Coupon): Promise<void> { 
+    if (supabase) await supabase.from('coupons').upsert(coupon);
+    await dbStore.put('coupons', coupon); 
+    window.dispatchEvent(new Event('couponsChanged')); 
+  },
   async saveProduct(p: Product): Promise<void> {
     await dbStore.put('products', p);
     if (supabase) await supabase.from('products').upsert(p);
@@ -415,15 +444,23 @@ export const storeService = {
     window.dispatchEvent(new Event('ordersChanged'));
   },
   async updateOrderStatus(id: string, status: OrderStatus): Promise<void> {
+    if (supabase) await supabase.from('orders').update({ status }).eq('id', id);
     const order = await dbStore.getByKey<Order>('orders', id);
     if (order) { order.status = status; await dbStore.put('orders', order); window.dispatchEvent(new Event('ordersChanged')); }
   },
   async captureLead(email: string, product: Product): Promise<void> {
     const lead: Lead = { id: 'lead-' + Date.now(), email, productId: product.id, productName: product.name, capturedAt: new Date().toISOString(), converted: false };
+    if (supabase) await supabase.from('leads').insert(lead);
     await dbStore.put('leads', lead);
     window.dispatchEvent(new Event('leadsChanged'));
   },
-  async getLeads(): Promise<Lead[]> { return await dbStore.getAll<Lead>('leads'); },
+  async getLeads(): Promise<Lead[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('leads').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Lead>('leads'); 
+  },
   async getAffiliates(): Promise<Affiliate[]> { 
     if (supabase) {
       const { data } = await supabase.from('affiliates').select('*');
@@ -433,14 +470,23 @@ export const storeService = {
   },
   async getCommissions(): Promise<Commission[]> { 
     if (supabase) {
-      // Busca comissões incluindo dados do afiliado relacionado
       const { data } = await supabase.from('commissions').select('*, affiliate:affiliates(name)');
       return data || [];
     }
     return await dbStore.getAll<Commission>('commissions'); 
   },
-  async getBanners(): Promise<Banner[]> { return await dbStore.getAll<Banner>('banners'); },
-  async saveBanner(banner: Banner): Promise<void> { await dbStore.put('banners', banner); window.dispatchEvent(new Event('bannersChanged')); },
+  async getBanners(): Promise<Banner[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('banners').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Banner>('banners'); 
+  },
+  async saveBanner(banner: Banner): Promise<void> { 
+    if (supabase) await supabase.from('banners').upsert(banner);
+    await dbStore.put('banners', banner); 
+    window.dispatchEvent(new Event('bannersChanged')); 
+  },
   async getRemarketingLogs(): Promise<RemarketingLog[]> { return await dbStore.getAll<RemarketingLog>('remarketing_logs'); },
   async getTemplates(): Promise<EmailTemplate[]> { return await dbStore.getAll<EmailTemplate>('email_templates'); },
   async triggerRemarketing(lead: Lead): Promise<void> {
@@ -453,12 +499,46 @@ export const storeService = {
     if (session) { session.status = status; await dbStore.put('chat_sessions', session); window.dispatchEvent(new Event('chatSessionsChanged')); }
   },
   async getPerformanceMetrics(): Promise<PerformanceMetric[]> { return await dbStore.getAll<PerformanceMetric>('performance_metrics'); },
-  async getSystemLogs(): Promise<SystemLog[]> { return await dbStore.getAll<SystemLog>('system_logs'); },
-  async getGateways(): Promise<PaymentGateway[]> { return await dbStore.getAll<PaymentGateway>('gateways'); },
-  async saveGateway(gateway: PaymentGateway): Promise<void> { await dbStore.put('gateways', gateway); window.dispatchEvent(new Event('gatewaysChanged')); },
-  async getTransactions(): Promise<Transaction[]> { return await dbStore.getAll<Transaction>('transactions'); },
-  async getCarriers(): Promise<Carrier[]> { return await dbStore.getAll<Carrier>('carriers'); },
-  async getDeliveries(): Promise<Delivery[]> { return await dbStore.getAll<Delivery>('deliveries'); },
+  async getSystemLogs(): Promise<SystemLog[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('system_logs').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<SystemLog>('system_logs'); 
+  },
+  async getGateways(): Promise<PaymentGateway[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('payment_gateways').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<PaymentGateway>('gateways'); 
+  },
+  async saveGateway(gateway: PaymentGateway): Promise<void> { 
+    if (supabase) await supabase.from('payment_gateways').upsert(gateway);
+    await dbStore.put('gateways', gateway); 
+    window.dispatchEvent(new Event('gatewaysChanged')); 
+  },
+  async getTransactions(): Promise<Transaction[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('transactions').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Transaction>('transactions'); 
+  },
+  async getCarriers(): Promise<Carrier[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('carriers').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Carrier>('carriers'); 
+  },
+  async getDeliveries(): Promise<Delivery[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('deliveries').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Delivery>('deliveries'); 
+  },
   async getSessions(): Promise<UserSession[]> { return await dbStore.getAll<UserSession>('sessions'); },
   async getAuditLogs(): Promise<AuditLog[]> { 
     if (supabase) {
@@ -467,7 +547,13 @@ export const storeService = {
     }
     return await dbStore.getAll<AuditLog>('audit_logs'); 
   },
-  async getSecurityEvents(): Promise<SecurityEvent[]> { return await dbStore.getAll<SecurityEvent>('security_events'); },
+  async getSecurityEvents(): Promise<SecurityEvent[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('security_events').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<SecurityEvent>('security_events'); 
+  },
   async updateEnvironment(env: string): Promise<void> {
     const settings = await this.getSettings();
     if (settings) { settings.environment = env as any; await this.saveSettings(settings); }
@@ -483,13 +569,31 @@ export const storeService = {
     await dbStore.put('backups', backup); window.dispatchEvent(new Event('backupsChanged'));
   },
   getInfraMetrics(): InfraMetric { return { uptime: '22d 4h 10m', latency: 32, cpu: 8, ram: 22, lastHealthCheck: new Date().toISOString() }; },
-  async getSellers(): Promise<Seller[]> { return await dbStore.getAll<Seller>('sellers'); },
-  async saveSeller(seller: Seller): Promise<void> { await dbStore.put('sellers', seller); window.dispatchEvent(new Event('sellersChanged')); },
+  async getSellers(): Promise<Seller[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('sellers').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<Seller>('sellers'); 
+  },
+  async saveSeller(seller: Seller): Promise<void> { 
+    if (supabase) await supabase.from('sellers').upsert(seller);
+    await dbStore.put('sellers', seller); 
+    window.dispatchEvent(new Event('sellersChanged')); 
+  },
   async saveConsent(userEmail: string, accepted: boolean): Promise<void> {
     const consent: LGPDConsent = { id: 'con-' + Date.now(), userEmail, accepted, ip: '189.12.34.56', userAgent: navigator.userAgent, timestamp: new Date().toISOString() };
-    await dbStore.put('consents', consent); window.dispatchEvent(new Event('consentsChanged'));
+    if (supabase) await supabase.from('lgpd_consents').insert(consent);
+    await dbStore.put('consents', consent); 
+    window.dispatchEvent(new Event('consentsChanged'));
   },
-  async getConsents(): Promise<LGPDConsent[]> { return await dbStore.getAll<LGPDConsent>('consents'); },
+  async getConsents(): Promise<LGPDConsent[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('lgpd_consents').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<LGPDConsent>('consents'); 
+  },
   async getUserPersonalData(email: string): Promise<any> {
     const users = await this.getUsers();
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -499,10 +603,17 @@ export const storeService = {
   },
   async logLGPD(type: 'consent' | 'revocation' | 'data_export' | 'data_deletion', userEmail: string, message: string): Promise<void> {
     const log: LGPDLog = { id: 'lgpd-' + Date.now(), type, userEmail, message, timestamp: new Date().toISOString() };
+    if (supabase) await supabase.from('lgpd_logs').insert(log);
     await dbStore.put('lgpd_logs', log); window.dispatchEvent(new Event('lgpdLogsChanged'));
   },
   async deleteUserPersonalData(email: string): Promise<void> { await this.logLGPD('data_deletion', email, 'Exclusão definitiva solicitada.'); },
-  async getLGPDLogs(): Promise<LGPDLog[]> { return await dbStore.getAll<LGPDLog>('lgpd_logs'); },
+  async getLGPDLogs(): Promise<LGPDLog[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('lgpd_logs').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<LGPDLog>('lgpd_logs'); 
+  },
   getPWAMetrics(): any { return { installs: 1242, activeUsersMobile: 856, version: 'v4.0.0' }; },
   async getPWANotifications(): Promise<PWANotification[]> { return await dbStore.getAll<PWANotification>('pwa_notifications'); },
   async sendPWANotification(title: string, body: string): Promise<void> {
@@ -527,12 +638,22 @@ export const storeService = {
   },
   async saveAPIConfig(cfg: ExternalAPIConfig): Promise<void> { await dbStore.put('api_configs', cfg); window.dispatchEvent(new Event('apiConfigsChanged')); },
   async getSyncLogs(): Promise<IntegrationSyncLog[]> { return await dbStore.getAll<IntegrationSyncLog>('sync_logs'); },
-  async getAIRecommendations(): Promise<AIRecommendation[]> { return await dbStore.getAll<AIRecommendation>('ai_recommendations'); },
+  async getAIRecommendations(): Promise<AIRecommendation[]> { 
+    if (supabase) {
+      const { data } = await supabase.from('ai_recommendations').select('*');
+      return data || [];
+    }
+    return await dbStore.getAll<AIRecommendation>('ai_recommendations'); 
+  },
   async getAIPredictions(): Promise<AIPrediction[]> { return await dbStore.getAll<AIPrediction>('ai_predictions'); },
   async getAIAutomations(): Promise<AIAutomationRule[]> { return await dbStore.getAll<AIAutomationRule>('ai_automations'); },
   async saveAIAutomation(rule: AIAutomationRule): Promise<void> { await dbStore.put('ai_automations', rule); window.dispatchEvent(new Event('aiAutomationsChanged')); },
   async getAILogs(): Promise<AILogEntry[]> { return await dbStore.getAll<AILogEntry>('ai_logs'); },
-  async saveRole(role: RoleDefinition): Promise<void> { await dbStore.put('roles', role); window.dispatchEvent(new Event('rolesChanged')); },
+  async saveRole(role: RoleDefinition): Promise<void> { 
+    if (supabase) await supabase.from('user_roles').upsert(role);
+    await dbStore.put('roles', role); 
+    window.dispatchEvent(new Event('rolesChanged')); 
+  },
   async getHelpTopic(id: string): Promise<HelpTopic | null> {
     const topic = await dbStore.getByKey<HelpTopic>('help_topics', id);
     if (topic) return topic;

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import HeaderSimple from './components/HeaderSimple';
@@ -27,7 +26,7 @@ import CustomerPortal from './pages/CustomerPortal';
 import AICoach from './components/AICoach';
 import LGPDBanner from './components/LGPDBanner';
 
-// Modulos Adicionais
+// Modulos Adicionais (Auditados)
 import MarketingBanners from './pages/MarketingBanners';
 import MarketingRemarketing from './pages/MarketingRemarketing';
 import MarketingChatIA from './pages/MarketingChatIA';
@@ -105,13 +104,14 @@ const App: React.FC = () => {
   const [isCoachOpen, setIsCoachOpen] = useState(false);
   const [cart, setCart] = useState<Product[]>([]);
   const [feedback, setFeedback] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
+  
+  // Login states
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const handleRoleLanding = (role: UserRole) => {
-    // 1. Cargos Administrativos (MASTER, FINANCE, etc)
     const staffRoles = [
       UserRole.ADMIN_MASTER, 
       UserRole.ADMIN_OPERATIONAL, 
@@ -123,63 +123,35 @@ const App: React.FC = () => {
     if (staffRoles.includes(role)) {
       setViewMode('admin');
       setCurrentRoute('dashboard');
-    } 
-    // 2. Afiliado -> Portal de Gestão de Vendas (Loja Afiliado)
-    else if (role === UserRole.AFFILIATE) {
+    } else if (role === UserRole.AFFILIATE) {
       setViewMode('store');
       setCurrentRoute('affiliate-portal');
-    }
-    // 3. Usuário Comum -> Portal do Cliente (Aba Usuário)
-    else if (role === UserRole.CUSTOMER) {
+    } else if (role === UserRole.CUSTOMER) {
       setViewMode('store');
       setCurrentRoute('customer-portal');
-    }
-    // 4. Fallback (Visitante)
-    else {
+    } else {
       setViewMode('store');
       setCurrentRoute('public-home');
+    }
+  };
+
+  const syncAuth = async () => {
+    if (!supabase) return;
+    const { data } = await supabase.auth.getSession();
+    if (data.session) {
+      const profile = await storeService.getProfileAfterLogin(data.session.user.id);
+      if (profile && profile.status === UserStatus.ACTIVE) {
+        const newSession = storeService.createSession(profile);
+        setSession(newSession);
+        handleRoleLanding(profile.role);
+      }
     }
   };
 
   useEffect(() => {
     const init = async () => {
       await storeService.initializeSystem();
-      
-      let currentSession = null;
-      if (supabase) {
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          const profile = await storeService.getProfileAfterLogin(data.session.user.id);
-          if (profile) {
-            if (profile.status === UserStatus.INACTIVE) {
-              setAuthError('Sua conta está inativa. Aguarde aprovação master.');
-              await storeService.logout();
-              setIsSystemReady(true);
-              return;
-            }
-            currentSession = storeService.createSession(profile);
-            setSession(currentSession);
-            handleRoleLanding(profile.role);
-          } else {
-            setAuthError('Perfil não encontrado no sistema.');
-            await storeService.logout();
-            setIsSystemReady(true);
-            return;
-          }
-        }
-      }
-
-      if (!currentSession) {
-        const cached = storeService.getActiveSession();
-        if (cached) {
-          setSession(cached);
-          handleRoleLanding(cached.userRole);
-        } else {
-          setViewMode('store');
-          setCurrentRoute('public-home');
-        }
-      }
-      
+      await syncAuth();
       setIsSystemReady(true);
     };
     init();
@@ -199,21 +171,14 @@ const App: React.FC = () => {
       if (res.success && res.session) {
         setSession(res.session);
         handleRoleLanding(res.session.userRole);
-        setFeedback({ message: 'Acesso autorizado!', type: 'success' });
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setFeedback({ message: 'Acesso Autorizado!', type: 'success' });
         setTimeout(() => setFeedback(null), 3000);
       } else {
-        setAuthError(res.error || 'Falha na autenticação');
+        setAuthError(res.error || 'Credenciais inválidas');
       }
     } finally {
       setIsLoggingIn(false);
     }
-  };
-
-  const handleGoogleLogin = async () => {
-    setAuthError(null);
-    const res = await storeService.loginWithGoogle();
-    if (!res.success) setAuthError(res.error || 'Falha no Google Auth');
   };
 
   const handleLogout = () => {
@@ -238,24 +203,27 @@ const App: React.FC = () => {
     );
   }
 
+  // Admin View Login Protection
   if (viewMode === 'admin' && !session) {
     return (
       <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
         <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl animate-in zoom-in-95 duration-700">
           <div className="text-center space-y-6">
             <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl shadow-emerald-500/20">G</div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Acesso Corporativo</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">G-Fit Hub Login</h1>
             {authError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase border border-red-100">{authError}</div>}
-            <form onSubmit={handleLogin} className="space-y-4 pt-4">
-               <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="E-mail" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
-               <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="Senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
-               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all shadow-xl active:scale-95">Entrar no Ecossistema</button>
+            <form onSubmit={handleLogin} className="space-y-4 pt-4 text-left">
+               <div className="space-y-1">
+                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">E-mail Corporativo</label>
+                 <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@gfitlife.io" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
+               </div>
+               <div className="space-y-1">
+                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Senha Segura</label>
+                 <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••••" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
+               </div>
+               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all shadow-xl active:scale-95">Autenticar agora</button>
             </form>
-            <button onClick={handleGoogleLogin} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95">
-              <img src="https://img.icons8.com/color/48/google-logo.png" className="w-6 h-6" alt="" />
-              Google Workspace SSO
-            </button>
-            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline">Navegar como Visitante</button>
+            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline">Voltar para a vitrine pública</button>
           </div>
         </div>
       </div>
