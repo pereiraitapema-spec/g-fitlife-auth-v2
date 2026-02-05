@@ -1,35 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 
-const getEnv = (key) => {
-  // Prioridade 1: Injeção direta via Define do Vite (Client-side bundle)
-  if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key];
-  }
-  // Prioridade 2: Variáveis de ambiente do Node (Server-side/Build time)
-  if (import.meta.env && import.meta.env[`VITE_${key}`]) {
-    return import.meta.env[`VITE_${key}`];
-  }
-  // Prioridade 3: Variáveis sem prefixo no import.meta.env
-  if (import.meta.env && import.meta.env[key]) {
-    return import.meta.env[key];
-  }
-  return '';
-};
+/**
+ * GFITLIFE SUPABASE INFRASTRUCTURE
+ * Ação Obrigatória: Leitura exclusiva via import.meta.env (Vite)
+ * Validação: Bloqueio total do sistema caso as chaves estejam ausentes.
+ */
 
-const supabaseUrl = getEnv('SUPABASE_URL') || getEnv('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY') || getEnv('VITE_SUPABASE_ANON_KEY');
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-let supabaseInstance = null;
-
-if (supabaseUrl && supabaseAnonKey && !supabaseUrl.includes('seu-projeto-id')) {
-  try {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
-    console.log("[GFIT-SYSTEM] Supabase Cloud Conectado.");
-  } catch (err) {
-    console.error("[GFIT-SYSTEM] Erro ao instanciar Supabase:", err.message);
-  }
-} else {
-  console.warn("[GFIT-SYSTEM] ALERTA: Chaves do Supabase não configuradas ou inválidas.");
+// Validação de segurança e infraestrutura
+if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('seu-projeto-id')) {
+  const errorMsg = "CRITICAL INFRASTRUCTURE ERROR: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is missing. System startup aborted to prevent data loss or inconsistent state.";
+  console.error(`[GFIT-SYSTEM-HALT] ${errorMsg}`);
+  throw new Error(errorMsg);
 }
 
-export const supabase = supabaseInstance;
+// Inicialização única e obrigatória
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+console.log("[GFIT-SYSTEM] Supabase Cloud Conectado e Ativo.");
