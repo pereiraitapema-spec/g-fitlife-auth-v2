@@ -11,6 +11,7 @@ export default {
     extend: {
       borderRadius: {
         '50px': '50px',
+        '60px': '60px',
       },
       colors: {
         emerald: {
@@ -25,10 +26,42 @@ export default {
           800: '#065f46',
           900: '#064e3b',
         }
-      }
+      },
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+      },
     },
   },
   plugins: [
     require('tailwindcss-animate'),
+    function({ addComponents, addUtilities, addBase }) {
+      addBase({
+        'body': {
+          '@apply bg-slate-50 text-slate-900 overflow-x-hidden': {},
+          '-webkit-tap-highlight-color': 'transparent',
+        },
+      });
+      addComponents({
+        '.glass': {
+          '@apply bg-white/80 backdrop-blur-xl border border-slate-200': {},
+        },
+      });
+      addUtilities({
+        '.custom-scrollbar': {
+          '&::-webkit-scrollbar': {
+            width: '4px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: 'transparent',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            '@apply bg-slate-200 rounded-full': {},
+            '&:hover': {
+              '@apply bg-slate-300': {},
+            },
+          },
+        },
+      });
+    },
   ],
 }

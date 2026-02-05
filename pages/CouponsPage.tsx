@@ -8,6 +8,7 @@ const CouponsPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({ code: '', type: CouponType.PERCENTAGE, value: 0, status: 'active' as const });
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadData = async () => {
     const data = await storeService.getCoupons();
@@ -25,22 +26,38 @@ const CouponsPage: React.FC = () => {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newCoupon: Coupon = {
-      ...formData,
-      id: 'c-' + Date.now(),
-    };
-    await storeService.saveCoupon(newCoupon);
-    await loadData();
-    setIsModalOpen(false);
-    showFeedback("Cupom criado no banco");
-    setFormData({ code: '', type: CouponType.PERCENTAGE, value: 0, status: 'active' });
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const newCoupon: Coupon = {
+        ...formData,
+        id: 'c-' + Date.now(),
+      };
+      await storeService.saveCoupon(newCoupon);
+      await loadData();
+      setIsModalOpen(false);
+      showFeedback("Cupom criado no banco");
+      setFormData({ code: '', type: CouponType.PERCENTAGE, value: 0, status: 'active' });
+    } catch (error) {
+      showFeedback("Erro ao criar cupom");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const toggleStatus = async (coupon: Coupon) => {
-    const updated = { ...coupon, status: coupon.status === 'active' ? 'inactive' : 'active' } as Coupon;
-    await storeService.saveCoupon(updated);
-    await loadData();
-    showFeedback("Status do cupom atualizado");
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const updated = { ...coupon, status: coupon.status === 'active' ? 'inactive' : 'active' } as Coupon;
+      await storeService.saveCoupon(updated);
+      await loadData();
+      showFeedback("Status do cupom atualizado");
+    } catch (error) {
+      showFeedback("Erro ao atualizar status");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -57,8 +74,9 @@ const CouponsPage: React.FC = () => {
           <p className="text-slate-500">Gestão persistente de ofertas.</p>
         </div>
         <button 
+          disabled={isSubmitting}
           onClick={() => setIsModalOpen(true)}
-          className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-bold shadow-lg hover:bg-emerald-600 transition-all"
+          className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-bold shadow-lg hover:bg-emerald-600 transition-all disabled:opacity-50"
         >
           + NOVO CUPOM
         </button>
@@ -85,7 +103,7 @@ const CouponsPage: React.FC = () => {
                   </p>
                 </td>
                 <td className="px-6 py-5 text-right">
-                   <button onClick={() => toggleStatus(coupon)} className="text-xs font-black text-slate-400 uppercase">{coupon.status === 'active' ? 'Desativar' : 'Ativar'}</button>
+                   <button disabled={isSubmitting} onClick={() => toggleStatus(coupon)} className="text-xs font-black text-slate-400 uppercase disabled:opacity-30">{coupon.status === 'active' ? 'Desativar' : 'Ativar'}</button>
                 </td>
               </tr>
             ))}
@@ -98,17 +116,19 @@ const CouponsPage: React.FC = () => {
           <div className="bg-white w-full max-w-md rounded-[40px] shadow-2xl p-10 animate-in zoom-in-95">
             <h3 className="text-2xl font-black text-slate-900 mb-8">Novo Cupom</h3>
             <form onSubmit={handleAdd} className="space-y-6">
-              <input required placeholder="Código (Ex: FIT2024)" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} className="w-full bg-slate-50 rounded-2xl p-5 font-black outline-none shadow-inner" />
+              <input required disabled={isSubmitting} placeholder="Código (Ex: FIT2024)" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} className="w-full bg-slate-50 rounded-2xl p-5 font-black outline-none shadow-inner" />
               <div className="grid grid-cols-2 gap-4">
-                <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as CouponType})} className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none">
+                <select disabled={isSubmitting} value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as CouponType})} className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none">
                   <option value={CouponType.PERCENTAGE}>%</option>
                   <option value={CouponType.FIXED}>R$</option>
                 </select>
-                <input required type="number" step="0.01" value={formData.value} onChange={e => setFormData({...formData, value: parseFloat(e.target.value)})} className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none shadow-inner" />
+                <input required disabled={isSubmitting} type="number" step="0.01" value={formData.value} onChange={e => setFormData({...formData, value: parseFloat(e.target.value)})} className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none shadow-inner" />
               </div>
               <div className="flex gap-4 pt-4">
-                <button type="submit" className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs">CRIAR NO BANCO</button>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold uppercase text-xs">CANCELAR</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs disabled:opacity-50">
+                  {isSubmitting ? 'CRIANDO...' : 'CRIAR NO BANCO'}
+                </button>
+                <button type="button" disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold uppercase text-xs">CANCELAR</button>
               </div>
             </form>
           </div>

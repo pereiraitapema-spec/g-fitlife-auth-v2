@@ -9,6 +9,7 @@ const Departments: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', status: 'active' as 'active' | 'inactive' });
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadData = async () => {
     const data = await storeService.getDepartments();
@@ -37,24 +38,39 @@ const Departments: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const deptData: Department = {
-      id: editId || 'dept-' + Date.now(),
-      name: formData.name,
-      // Fix: Cast to correct type
-      status: formData.status as any
-    };
-    
-    await storeService.saveDepartment(deptData);
-    await loadData();
-    setIsModalOpen(false);
-    showFeedback("Salvo com sucesso");
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const deptData: Department = {
+        id: editId || 'dept-' + Date.now(),
+        name: formData.name,
+        status: formData.status as any
+      };
+      
+      await storeService.saveDepartment(deptData);
+      await loadData();
+      setIsModalOpen(false);
+      showFeedback("Salvo com sucesso");
+    } catch (error) {
+      showFeedback("Erro ao salvar");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const toggleStatus = async (dept: Department) => {
-    const updated = { ...dept, status: dept.status === 'active' ? 'inactive' : 'active' } as Department;
-    await storeService.saveDepartment(updated);
-    await loadData();
-    showFeedback("Status atualizado");
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const updated = { ...dept, status: dept.status === 'active' ? 'inactive' : 'active' } as Department;
+      await storeService.saveDepartment(updated);
+      await loadData();
+      showFeedback("Status atualizado");
+    } catch (error) {
+      showFeedback("Erro ao atualizar status");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -71,8 +87,9 @@ const Departments: React.FC = () => {
           <p className="text-slate-500">Persistência segura em IndexedDB.</p>
         </div>
         <button 
+          disabled={isSubmitting}
           onClick={() => handleOpenModal()}
-          className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-bold hover:bg-emerald-600 transition-all shadow-lg"
+          className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-bold hover:bg-emerald-600 transition-all shadow-lg disabled:opacity-50"
         >
           + NOVO DEPARTAMENTO
         </button>
@@ -101,8 +118,8 @@ const Departments: React.FC = () => {
                 </td>
                 <td className="px-6 py-5 text-right">
                   <div className="flex justify-end gap-3">
-                    <button onClick={() => handleOpenModal(dept)} className="text-xs font-black text-blue-500 uppercase">Editar</button>
-                    <button onClick={() => toggleStatus(dept)} className="text-xs font-black text-slate-400 uppercase">Alternar</button>
+                    <button disabled={isSubmitting} onClick={() => handleOpenModal(dept)} className="text-xs font-black text-blue-500 uppercase disabled:opacity-30">Editar</button>
+                    <button disabled={isSubmitting} onClick={() => toggleStatus(dept)} className="text-xs font-black text-slate-400 uppercase disabled:opacity-30">Alternar</button>
                   </div>
                 </td>
               </tr>
@@ -116,14 +133,16 @@ const Departments: React.FC = () => {
           <div className="bg-white w-full max-w-md rounded-[40px] shadow-2xl p-10 animate-in zoom-in-95">
             <h3 className="text-2xl font-black text-slate-900 mb-8">{editId ? 'Editar' : 'Novo'} Departamento</h3>
             <form onSubmit={handleSubmit} className="space-y-6">
-              <input required placeholder="Nome do Departamento" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-5 font-bold outline-none shadow-inner" />
-              <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full bg-slate-50 border-none rounded-2xl p-5 font-bold outline-none">
+              <input required disabled={isSubmitting} placeholder="Nome do Departamento" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-5 font-bold outline-none shadow-inner" />
+              <select disabled={isSubmitting} value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full bg-slate-50 border-none rounded-2xl p-5 font-bold outline-none">
                 <option value="active">Ativo</option>
                 <option value="inactive">Inativo</option>
               </select>
               <div className="flex gap-4 pt-4">
-                <button type="submit" className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs">SALVAR NO BANCO</button>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold uppercase text-xs">CANCELAR</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs disabled:opacity-50">
+                  {isSubmitting ? 'SALVANDO...' : 'SALVAR NO BANCO'}
+                </button>
+                <button type="button" disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold uppercase text-xs">CANCELAR</button>
               </div>
             </form>
           </div>

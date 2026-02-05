@@ -10,6 +10,7 @@ const CategoriesPage: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', departmentId: '', status: 'active' as 'active' | 'inactive' });
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadData = async () => {
     const dData = await storeService.getDepartments();
@@ -40,18 +41,25 @@ const CategoriesPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const catData: Category = {
-      id: editId || 'cat-' + Date.now(),
-      name: formData.name,
-      departmentId: formData.departmentId,
-      // Fix: Cast status
-      status: formData.status as any
-    };
-    
-    await storeService.saveCategory(catData);
-    await loadData();
-    setIsModalOpen(false);
-    showFeedback("Salvo com sucesso");
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const catData: Category = {
+        id: editId || 'cat-' + Date.now(),
+        name: formData.name,
+        departmentId: formData.departmentId,
+        status: formData.status as any
+      };
+      
+      await storeService.saveCategory(catData);
+      await loadData();
+      setIsModalOpen(false);
+      showFeedback("Salvo com sucesso");
+    } catch (error) {
+      showFeedback("Erro ao salvar");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getDeptName = (id: string) => departments.find(d => d.id === id)?.name || 'N/A';
@@ -70,8 +78,9 @@ const CategoriesPage: React.FC = () => {
           <p className="text-slate-500">Subdivisões gerenciadas pelo ecossistema.</p>
         </div>
         <button 
+          disabled={isSubmitting}
           onClick={() => handleOpenModal()}
-          className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-bold shadow-lg hover:bg-emerald-600 transition-all"
+          className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-bold shadow-lg hover:bg-emerald-600 transition-all disabled:opacity-50"
         >
           + NOVA CATEGORIA
         </button>
@@ -98,7 +107,7 @@ const CategoriesPage: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-6 py-5 text-right">
-                  <button onClick={() => handleOpenModal(cat)} className="text-xs font-black text-blue-500 uppercase">Editar</button>
+                  <button disabled={isSubmitting} onClick={() => handleOpenModal(cat)} className="text-xs font-black text-blue-500 uppercase disabled:opacity-30">Editar</button>
                 </td>
               </tr>
             ))}
@@ -111,14 +120,16 @@ const CategoriesPage: React.FC = () => {
           <div className="bg-white w-full max-w-md rounded-[40px] shadow-2xl p-10 animate-in zoom-in-95">
             <h3 className="text-2xl font-black text-slate-900 mb-8">{editId ? 'Editar' : 'Nova'} Categoria</h3>
             <form onSubmit={handleSubmit} className="space-y-6">
-              <input required placeholder="Nome da Categoria" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none shadow-inner" />
-              <select required value={formData.departmentId} onChange={e => setFormData({...formData, departmentId: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none">
+              <input required disabled={isSubmitting} placeholder="Nome da Categoria" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none shadow-inner" />
+              <select required disabled={isSubmitting} value={formData.departmentId} onChange={e => setFormData({...formData, departmentId: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none">
                 <option value="" disabled>Selecione um departamento</option>
                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
               <div className="flex gap-4 pt-4">
-                <button type="submit" className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs">SALVAR NO BANCO</button>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold uppercase text-xs">CANCELAR</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs disabled:opacity-50">
+                  {isSubmitting ? 'SALVANDO...' : 'SALVAR NO BANCO'}
+                </button>
+                <button type="button" disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold uppercase text-xs">CANCELAR</button>
               </div>
             </form>
           </div>

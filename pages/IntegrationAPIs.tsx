@@ -7,10 +7,10 @@ const IntegrationAPIs: React.FC = () => {
   const [configs, setConfigs] = useState<ExternalAPIConfig[]>([]);
   const [logs, setLogs] = useState<IntegrationSyncLog[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Partial<ExternalAPIConfig>>({ provider: '', apiKey: '', type: 'crm', status: 'connected' });
 
   useEffect(() => {
-    // Adicionado await para carregar configurações de API e logs de sincronização
     const load = async () => {
       setConfigs(await storeService.getAPIConfigs());
       setLogs(await storeService.getSyncLogs());
@@ -19,21 +19,28 @@ const IntegrationAPIs: React.FC = () => {
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
-    // Adicionado await para garantir a persistência e recarga correta dos dados
     e.preventDefault();
-    const newCfg: ExternalAPIConfig = {
-      id: 'API-' + Date.now(),
-      provider: formData.provider || '',
-      type: formData.type as any,
-      apiKey: formData.apiKey || '',
-      status: 'connected',
-      lastSync: new Date().toISOString()
-    };
-    await storeService.saveAPIConfig(newCfg);
-    setConfigs(await storeService.getAPIConfigs());
-    setLogs(await storeService.getSyncLogs());
-    setIsModalOpen(false);
-    setFormData({ provider: '', apiKey: '', type: 'crm' });
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const newCfg: ExternalAPIConfig = {
+        id: 'API-' + Date.now(),
+        provider: formData.provider || '',
+        type: formData.type as any,
+        apiKey: formData.apiKey || '',
+        status: 'connected',
+        lastSync: new Date().toISOString()
+      };
+      await storeService.saveAPIConfig(newCfg);
+      setConfigs(await storeService.getAPIConfigs());
+      setLogs(await storeService.getSyncLogs());
+      setIsModalOpen(false);
+      setFormData({ provider: '', apiKey: '', type: 'crm' });
+    } catch (error) {
+      console.error("Erro ao salvar configuração de API", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -44,8 +51,9 @@ const IntegrationAPIs: React.FC = () => {
           <p className="text-slate-500 font-medium">Gerencie tokens, chaves de acesso e audite o tráfego de dados externo.</p>
         </div>
         <button 
+          disabled={isSubmitting}
           onClick={() => setIsModalOpen(true)}
-          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-emerald-500 transition-all active:scale-95"
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-emerald-500 transition-all active:scale-95 disabled:opacity-50"
         >
           + NOVA CHAVE API
         </button>
@@ -103,11 +111,11 @@ const IntegrationAPIs: React.FC = () => {
           <div className="bg-white w-full max-w-md rounded-[50px] shadow-2xl p-10 animate-in zoom-in-95">
             <h3 className="text-2xl font-black mb-8">Registrar API Key</h3>
             <form onSubmit={handleSave} className="space-y-6">
-              <input required placeholder="Provedor (Ex: RD Station)" value={formData.provider} onChange={e => setFormData({...formData, provider: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
-              <input required placeholder="Token / API Key" value={formData.apiKey} onChange={e => setFormData({...formData, apiKey: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+              <input required disabled={isSubmitting} placeholder="Provedor (Ex: RD Station)" value={formData.provider} onChange={e => setFormData({...formData, provider: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+              <input required disabled={isSubmitting} placeholder="Token / API Key" value={formData.apiKey} onChange={e => setFormData({...formData, apiKey: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tipo de Integração</label>
-                <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as any})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold">
+                <select disabled={isSubmitting} value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as any})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold">
                    <option value="crm">CRM / Marketing</option>
                    <option value="whatsapp">WhatsApp Business</option>
                    <option value="erp">ERP / Gestão</option>
@@ -115,8 +123,10 @@ const IntegrationAPIs: React.FC = () => {
                 </select>
               </div>
               <div className="flex gap-4 pt-4">
-                <button type="submit" className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black hover:bg-emerald-500 transition-all">SALVAR CREDENCIAIS</button>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold">CANCELAR</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black hover:bg-emerald-500 transition-all disabled:opacity-50">
+                  {isSubmitting ? 'SALVANDO...' : 'SALVAR CREDENCIAIS'}
+                </button>
+                <button type="button" disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold">CANCELAR</button>
               </div>
             </form>
           </div>

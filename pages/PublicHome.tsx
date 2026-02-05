@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Product, Banner, UserSession } from '../types';
 import { storeService } from '../services/storeService';
@@ -14,6 +13,11 @@ const PublicHome: React.FC<PublicHomeProps> = ({ onNavigate, onAddToCart }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<UserSession | null>(null);
+
+  // URLs otimizadas via Unsplash (WebP automático, compressão inteligente q=75 e largura otimizada)
+  const HERO_IMAGE = "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=75&w=1600&compress=true";
+  const SUPPLEMENTS_IMAGE = "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&q=75&w=1000&compress=true";
+  const EQUIPMENT_IMAGE = "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=75&w=1000&compress=true";
 
   const loadData = async () => {
     const bData = await storeService.getBanners();
@@ -44,7 +48,7 @@ const PublicHome: React.FC<PublicHomeProps> = ({ onNavigate, onAddToCart }) => {
            <img src={banners[0].imageUrl} className="w-full h-full object-cover transition-transform duration-[10000ms] group-hover:scale-110" alt={banners[0].title} />
          ) : (
            <div className="w-full h-full bg-slate-900 flex items-center justify-center">
-              <img src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=2070" className="absolute inset-0 w-full h-full object-cover opacity-60" alt="" />
+              <img src={HERO_IMAGE} className="absolute inset-0 w-full h-full object-cover opacity-60" alt="G-FitLife Hero" />
               <div className="relative z-10 text-center space-y-10 px-6">
                  <div className="space-y-4">
                     <span className="px-6 py-2 bg-emerald-500 text-white rounded-full text-[10px] font-black uppercase tracking-[0.4em] shadow-xl">G-FITLIFE HUB ENTERPRISE</span>
@@ -81,7 +85,7 @@ const PublicHome: React.FC<PublicHomeProps> = ({ onNavigate, onAddToCart }) => {
          <div className="grid grid-cols-1 md:grid-cols-4 grid-rows-2 gap-8 h-auto md:h-[600px]">
             {/* Bloco 1: Suplementos (Grande) */}
             <div onClick={() => onNavigate('departments')} className="md:col-span-2 md:row-span-2 bg-slate-100 rounded-[50px] p-12 flex flex-col justify-end group cursor-pointer overflow-hidden relative shadow-sm hover:shadow-2xl transition-all border border-slate-200/50">
-               <img src="https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=2070" className="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:scale-110 transition-transform duration-[2000ms]" alt="" />
+               <img src={SUPPLEMENTS_IMAGE} className="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:scale-110 transition-transform duration-[2000ms]" alt="Suplementação" />
                <div className="relative z-10 space-y-4">
                   <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-xl">💊</div>
                   <h3 className="text-4xl font-black text-slate-900">Suplementação <br/> Avançada</h3>
@@ -91,7 +95,7 @@ const PublicHome: React.FC<PublicHomeProps> = ({ onNavigate, onAddToCart }) => {
 
             {/* Bloco 2: Equipamentos */}
             <div onClick={() => onNavigate('departments')} className="md:col-span-2 bg-emerald-500 rounded-[50px] p-10 flex flex-col justify-end group cursor-pointer overflow-hidden relative shadow-xl shadow-emerald-500/20">
-               <img src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=2070" className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:scale-110 transition-transform" alt="" />
+               <img src={EQUIPMENT_IMAGE} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:scale-110 transition-transform" alt="Equipamentos" />
                <div className="relative z-10 flex justify-between items-end">
                   <div>
                     <h3 className="text-3xl font-black text-white">Equipamentos <br/> Pro</h3>

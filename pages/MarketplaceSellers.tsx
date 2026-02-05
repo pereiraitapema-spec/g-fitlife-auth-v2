@@ -6,6 +6,7 @@ import { Seller } from '../types';
 const MarketplaceSellers: React.FC = () => {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Partial<Seller>>({ name: '', email: '', commissionRate: 15, status: 'active' });
 
   useEffect(() => {
@@ -18,23 +19,30 @@ const MarketplaceSellers: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newSeller: Seller = {
-      id: 'SEL-' + Date.now(),
-      userId: 'u-temp',
-      name: formData.name || '',
-      email: formData.email || '',
-      status: formData.status as any,
-      commissionRate: formData.commissionRate || 15,
-      totalSales: 0,
-      rating: 5.0,
-      createdAt: new Date().toISOString()
-    };
-    // Fix: Await save and reload
-    await storeService.saveSeller(newSeller);
-    const data = await storeService.getSellers();
-    setSellers(data);
-    setIsModalOpen(false);
-    setFormData({ name: '', email: '', commissionRate: 15, status: 'active' });
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const newSeller: Seller = {
+        id: 'SEL-' + Date.now(),
+        userId: 'u-temp',
+        name: formData.name || '',
+        email: formData.email || '',
+        status: formData.status as any,
+        commissionRate: formData.commissionRate || 15,
+        totalSales: 0,
+        rating: 5.0,
+        createdAt: new Date().toISOString()
+      };
+      await storeService.saveSeller(newSeller);
+      const data = await storeService.getSellers();
+      setSellers(data);
+      setIsModalOpen(false);
+      setFormData({ name: '', email: '', commissionRate: 15, status: 'active' });
+    } catch (error) {
+      console.error("Erro ao salvar lojista", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -45,8 +53,9 @@ const MarketplaceSellers: React.FC = () => {
           <p className="text-slate-500 font-medium">Controle os parceiros que vendem na plataforma G-FitLife.</p>
         </div>
         <button 
+          disabled={isSubmitting}
           onClick={() => setIsModalOpen(true)}
-          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black shadow-2xl hover:bg-emerald-500 transition-all active:scale-95"
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black shadow-2xl hover:bg-emerald-500 transition-all active:scale-95 disabled:opacity-50"
         >
           + CADASTRAR VENDEDOR
         </button>
@@ -98,7 +107,7 @@ const MarketplaceSellers: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-8 py-6 text-right">
-                   <button className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest">Configurar</button>
+                   <button disabled={isSubmitting} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest disabled:opacity-30">Configurar</button>
                 </td>
               </tr>
             ))}
@@ -111,15 +120,17 @@ const MarketplaceSellers: React.FC = () => {
           <div className="bg-white w-full max-w-md rounded-[50px] shadow-2xl p-10 animate-in zoom-in-95">
             <h3 className="text-2xl font-black mb-8">Novo Lojista</h3>
             <form onSubmit={handleSave} className="space-y-6">
-              <input required placeholder="Nome Fantasia" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
-              <input required type="email" placeholder="E-mail Administrativo" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+              <input required disabled={isSubmitting} placeholder="Nome Fantasia" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+              <input required disabled={isSubmitting} type="email" placeholder="E-mail Administrativo" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Taxa Marketplace (%)</label>
-                <input type="number" value={formData.commissionRate} onChange={e => setFormData({...formData, commissionRate: parseInt(e.target.value)})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+                <input type="number" disabled={isSubmitting} value={formData.commissionRate} onChange={e => setFormData({...formData, commissionRate: parseInt(e.target.value)})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
               </div>
               <div className="flex gap-4 pt-4">
-                <button type="submit" className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black hover:bg-emerald-500 transition-all">SALVAR BACKEND</button>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold">CANCELAR</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black hover:bg-emerald-500 transition-all disabled:opacity-50">
+                  {isSubmitting ? 'CADASTRANDO...' : 'SALVAR BACKEND'}
+                </button>
+                <button type="button" disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold">CANCELAR</button>
               </div>
             </form>
           </div>

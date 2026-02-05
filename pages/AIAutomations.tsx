@@ -6,10 +6,10 @@ import { AIAutomationRule } from '../types';
 const AIAutomations: React.FC = () => {
   const [rules, setRules] = useState<AIAutomationRule[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Partial<AIAutomationRule>>({ name: '', trigger: '', action: '', status: 'active' });
 
   useEffect(() => {
-    // Adicionado await para carregar regras de automação
     const load = async () => {
       setRules(await storeService.getAIAutomations());
     };
@@ -17,19 +17,27 @@ const AIAutomations: React.FC = () => {
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
-    // Adicionado await para persistir a regra e recarregar a lista
     e.preventDefault();
-    const newRule: AIAutomationRule = {
-      id: 'rule-' + Date.now(),
-      name: formData.name || '',
-      trigger: formData.trigger || '',
-      action: formData.action || '',
-      status: 'active',
-      executionsCount: 0
-    };
-    await storeService.saveAIAutomation(newRule);
-    setRules(await storeService.getAIAutomations());
-    setIsModalOpen(false);
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const newRule: AIAutomationRule = {
+        id: 'rule-' + Date.now(),
+        name: formData.name || '',
+        trigger: formData.trigger || '',
+        action: formData.action || '',
+        status: 'active',
+        executionsCount: 0
+      };
+      await storeService.saveAIAutomation(newRule);
+      setRules(await storeService.getAIAutomations());
+      setIsModalOpen(false);
+      setFormData({ name: '', trigger: '', action: '', status: 'active' });
+    } catch (error) {
+      console.error("Erro ao salvar regra de IA", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -40,8 +48,9 @@ const AIAutomations: React.FC = () => {
           <p className="text-slate-500 font-medium">Configure gatilhos automáticos disparados pelo motor de IA do ecossistema.</p>
         </div>
         <button 
+          disabled={isSubmitting}
           onClick={() => setIsModalOpen(true)}
-          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-500 transition-all"
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-500 transition-all disabled:opacity-50"
         >
           + NOVA REGRA IA
         </button>
@@ -72,8 +81,8 @@ const AIAutomations: React.FC = () => {
              </div>
 
              <div className="flex gap-3">
-                <button className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all">Logs Detalhados</button>
-                <button className="px-6 py-4 bg-slate-50 text-slate-400 rounded-xl hover:bg-red-500 hover:text-white transition-all">🗑️</button>
+                <button disabled={isSubmitting} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-30">Logs Detalhados</button>
+                <button disabled={isSubmitting} className="px-6 py-4 bg-slate-50 text-slate-400 rounded-xl hover:bg-red-500 hover:text-white transition-all disabled:opacity-30">🗑️</button>
              </div>
           </div>
         ))}
@@ -84,10 +93,10 @@ const AIAutomations: React.FC = () => {
           <div className="bg-white w-full max-w-md rounded-[50px] shadow-2xl p-10 animate-in zoom-in-95">
             <h3 className="text-2xl font-black mb-8">Criar Gatilho IA</h3>
             <form onSubmit={handleSave} className="space-y-6">
-              <input required placeholder="Nome da Automação" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+              <input required disabled={isSubmitting} placeholder="Nome da Automação" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Gatilho (Trigger)</label>
-                <select value={formData.trigger} onChange={e => setFormData({...formData, trigger: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold">
+                <select disabled={isSubmitting} value={formData.trigger} onChange={e => setFormData({...formData, trigger: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold">
                    <option value="">Selecione...</option>
                    <option value="Lead Capturado">Lead Capturado</option>
                    <option value="Carrinho Abandonado">Carrinho Abandonado</option>
@@ -97,11 +106,13 @@ const AIAutomations: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Ação IA (Action)</label>
-                <input required placeholder="Ex: Enviar Cupom 10% WA" value={formData.action} onChange={e => setFormData({...formData, action: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+                <input required disabled={isSubmitting} placeholder="Ex: Enviar Cupom 10% WA" value={formData.action} onChange={e => setFormData({...formData, action: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
               </div>
               <div className="flex gap-4 pt-4">
-                <button type="submit" className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black hover:bg-emerald-500 transition-all">ATIVAR REGRA</button>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold">CANCELAR</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black hover:bg-emerald-500 transition-all disabled:opacity-50">
+                  {isSubmitting ? 'ATIVANDO...' : 'ATIVAR REGRA'}
+                </button>
+                <button type="button" disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold">CANCELAR</button>
               </div>
             </form>
           </div>
