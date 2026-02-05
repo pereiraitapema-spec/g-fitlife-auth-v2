@@ -18,7 +18,7 @@ async function seedMasterUser() {
 
     console.log('[CORE-SEED] Validando infraestrutura Master...');
     
-    // Verifica se já existe no Auth
+    // Verifica se já existe no Auth via Admin API
     const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     if (listError) throw listError;
 
@@ -56,6 +56,7 @@ async function seedMasterUser() {
   }
 }
 
+// Rodar Seed na inicialização
 seedMasterUser();
 
 // Middlewares de Segurança e Log
@@ -73,7 +74,6 @@ app.post('/api/admin/create-user', async (req, res) => {
   try {
     const { email, password, name, role } = req.body;
     
-    // 1. Criar credencial no Auth
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email.toLowerCase(),
       password,
@@ -83,7 +83,6 @@ app.post('/api/admin/create-user', async (req, res) => {
     
     if (authError) return res.status(400).json({ error: authError.message });
 
-    // 2. Criar perfil na tabela pública
     const { error: profileError } = await supabaseAdmin.from('user_profile').insert({
       id: authUser.user.id,
       name,
@@ -95,7 +94,6 @@ app.post('/api/admin/create-user', async (req, res) => {
     });
 
     if (profileError) {
-        // Rollback no Auth se falhar o perfil
         await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
         return res.status(400).json({ error: 'Erro ao criar perfil no banco.' });
     }
@@ -113,7 +111,7 @@ app.delete('/api/admin/delete-user', async (req, res) => {
     const masterEmail = (process.env.MASTER_EMAIL || 'admin@system.local').toLowerCase();
     
     if (user?.user?.email.toLowerCase() === masterEmail) {
-      return res.status(403).json({ error: 'Proibido excluir a conta Master do sistema.' });
+      return res.status(403).json({ error: 'Proibido excluir a conta Master.' });
     }
 
     await supabaseAdmin.auth.admin.deleteUser(userId);
@@ -133,7 +131,7 @@ app.get('/api/health', (req, res) => {
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
-// Fallback SPA - Serve index.html para qualquer rota não mapeada (Essencial para React Router)
+// Fallback SPA - Importante para evitar MIME type error ao dar refresh em sub-rotas
 app.get('*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });

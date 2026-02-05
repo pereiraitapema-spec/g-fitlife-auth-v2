@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.user_profile (
 -- 2. Configurações Globais
 CREATE TABLE IF NOT EXISTS public.core_settings (
     key TEXT PRIMARY KEY,
-    nome_loja TEXT,
+    nome_loja TEXT DEFAULT 'G-FitLife',
     logo_url TEXT,
     email_contato TEXT,
     telefone TEXT,
@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS public.products (
     reviews INTEGER DEFAULT 0,
     tags TEXT[],
     description TEXT,
-    status TEXT DEFAULT 'active'
+    status TEXT DEFAULT 'active',
+    seller_id TEXT
 );
 
 -- 5. Pedidos
@@ -76,35 +77,37 @@ CREATE TABLE IF NOT EXISTS public.orders (
     affiliate_id TEXT
 );
 
--- 6. Favoritos do Usuário
-CREATE TABLE IF NOT EXISTS public.user_favorites (
-    id TEXT PRIMARY KEY,
-    userId UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    productId TEXT,
-    createdAt TIMESTAMPTZ DEFAULT NOW()
-);
-
 -- ATIVAÇÃO DE RLS (SEGURANÇA)
 ALTER TABLE public.user_profile ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.core_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.banners ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
--- POLICIES BÁSICAS (Leitura pública, Escrita autenticada)
+-- POLICIES BÁSICAS
+-- Produtos e Banners: Leitura pública
 CREATE POLICY "Leitura pública de produtos" ON public.products FOR SELECT USING (true);
+CREATE POLICY "Leitura pública de banners" ON public.banners FOR SELECT USING (true);
 CREATE POLICY "Leitura pública de settings" ON public.core_settings FOR SELECT USING (true);
+
+-- Perfil: Apenas o dono ou Service Role
 CREATE POLICY "Perfil visível pelo próprio usuário" ON public.user_profile FOR SELECT USING (auth.uid() = id);
+
+-- Pedidos: Apenas o dono
+CREATE POLICY "Pedidos visíveis pelo próprio comprador" ON public.orders FOR SELECT USING (auth.jwt() ->> 'email' = customer_email);
 
 -- TRIGGER PARA AUTO-CRIAÇÃO DE PERFIL NO AUTH SIGNUP
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.user_profile (id, email, name, role, status)
-  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'customer', 'active');
+  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'customer', 'active')
+  ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
--- CREATE TRIGGER on_auth_user_created
---   AFTER INSERT ON auth.users
---   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
