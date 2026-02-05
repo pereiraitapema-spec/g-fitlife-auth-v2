@@ -139,4 +139,3 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 G-FITLIFE BACKEND ONLINE NA PORTA ${PORT}`);
 });
- 

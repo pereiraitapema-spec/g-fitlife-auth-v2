@@ -1,17 +1,25 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * CLIENTE SUPABASE PARA FRONTEND (BROWSER)
- * Regra de Ouro: Utiliza APENAS a Anon Public Key.
- * As chaves são injetadas via process.env no build do Vite.
+ * CLIENTE SUPABASE PARA FRONTEND
+ * Proteção contra variáveis indefinidas que causam tela branca.
  */
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+const supabaseUrl = (typeof process !== 'undefined' && process.env?.SUPABASE_URL) || '';
+const supabaseAnonKey = (typeof process !== 'undefined' && process.env?.SUPABASE_ANON_KEY) || '';
 
-// Inicialização direta para evitar conflitos de detecção de segredos no frontend
-export const supabase = (supabaseUrl && supabaseAnonKey) 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+let supabaseInstance = null;
 
+if (supabaseUrl && supabaseAnonKey) {
+  try {
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+  } catch (err) {
+    console.error("[SUPABASE-INIT-ERROR]", err);
+  }
+} else {
+  console.warn("[SUPABASE] Variáveis de ambiente ausentes. O sistema funcionará em modo offline.");
+}
+
+export const supabase = supabaseInstance;
 export const getSupabase = () => supabase;
