@@ -13,7 +13,7 @@ export const storageService = {
       throw new Error('Sistema de armazenamento offline. Verifique as chaves SUPABASE_URL e SUPABASE_ANON_KEY.');
     }
 
-    // 1. Gerar nome de arquivo único
+    // 1. Gerar nome de arquivo único para evitar colisões
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `${folder}/${fileName}`;

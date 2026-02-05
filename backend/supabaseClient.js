@@ -4,6 +4,10 @@ const getEnv = (key) => {
   if (typeof process !== 'undefined' && process.env && process.env[key]) {
     return process.env[key];
   }
+  // Suporte para Vite client-side
+  if (import.meta.env && import.meta.env[`VITE_${key}`]) {
+    return import.meta.env[`VITE_${key}`];
+  }
   return '';
 };
 
@@ -19,7 +23,7 @@ if (supabaseUrl && supabaseAnonKey && !supabaseUrl.includes('seu-projeto-id')) {
     console.warn("[GFIT-SYSTEM] Falha ao inicializar Supabase:", err.message);
   }
 } else {
-  console.info("[GFIT-SYSTEM] Operando em modo de demonstração OFFLINE (Chaves ausentes).");
+  console.info("[GFIT-SYSTEM] Operando em modo de demonstração (Configurando variáveis de ambiente).");
 }
 
 export const supabase = supabaseInstance;
