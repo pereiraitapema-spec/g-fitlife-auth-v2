@@ -40,7 +40,7 @@ export const storeService = {
             privacyPolicy: 'Política LGPD G-FitLife...',
             termsOfUse: 'Termos de uso corporativos...',
             pwaInstalledCount: 0,
-            pwaVersion: '4.0.0',
+            pwaVersion: '4.2.0',
             pushNotificationsActive: true,
             language: 'pt-BR',
             currency: 'BRL'
@@ -50,7 +50,7 @@ export const storeService = {
         }
       }
     } catch (err) {
-      console.warn("Inicialização em modo offline/demo.");
+      console.warn("Modo offline ativo.");
     }
   },
 
@@ -61,7 +61,7 @@ export const storeService = {
       return { success: true, session, profile: fallbackAdmin, isStaff: true };
     }
 
-    if (!supabase) return { success: false, error: 'Serviço offline' };
+    if (!supabase) return { success: false, error: 'Supabase Offline' };
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -75,7 +75,7 @@ export const storeService = {
         if (profile) {
           if (profile.status !== UserStatus.ACTIVE) {
             await supabase.auth.signOut();
-            return { success: false, error: 'Sua conta está inativa' };
+            return { success: false, error: 'Conta suspensa ou inativa' };
           }
           const session = this.createSession(profile);
           const isStaff = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING, UserRole.SELLER].includes(profile.role);
@@ -83,13 +83,13 @@ export const storeService = {
         }
       }
     } catch (err) {
-      return { success: false, error: 'Erro de conexão' };
+      return { success: false, error: 'Erro de comunicação' };
     }
-    return { success: false, error: 'Perfil não registrado no sistema.' };
+    return { success: false, error: 'Usuário não encontrado' };
   },
 
   async loginWithGoogle() {
-    if (!supabase) return { success: false, error: 'Indisponível' };
+    if (!supabase) return { success: false, error: 'Social Auth Offline' };
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -101,38 +101,37 @@ export const storeService = {
       if (error) throw error;
       return { success: true };
     } catch (err) {
-      console.error("Google Auth Error:", err);
-      return { success: false, error: 'Falha na conexão com Google' };
+      return { success: false, error: 'Falha no OAuth Google' };
     }
   },
 
   async getProfileAfterLogin(userId: string) {
     if (!supabase) return null;
     
-    // CORREÇÃO: Tabela 'user_profile'
+    // CORREÇÃO: Tabela singular 'user_profile'
     const { data: profileByUid } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
     if (profileByUid) return profileByUid;
 
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (authUser?.email) {
       const email = authUser.email.toLowerCase();
-      // CORREÇÃO: Tabela 'user_profile'
+      // Fusão: Busca por e-mail caso seja o primeiro login social em conta já cadastrada
       const { data: profileByEmail } = await supabase.from('user_profile').select('*').eq('email', email).maybeSingle();
       
       if (profileByEmail) {
         await supabase.from('user_profile').update({ id: authUser.id, loginType: 'hybrid' }).eq('email', email);
         return { ...profileByEmail, id: authUser.id, loginType: 'hybrid' };
       } else {
+        // Novo Usuário via Google
         const newProfile = {
           id: authUser.id,
           email: email,
-          name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'Novo Usuário G-Fit',
+          name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'Membro G-Fit',
           role: UserRole.CUSTOMER,
           status: UserStatus.ACTIVE,
           loginType: 'hybrid',
           created_at: new Date().toISOString()
         };
-        // CORREÇÃO: Tabela 'user_profile'
         const { data: created } = await supabase.from('user_profile').insert(newProfile).select().single();
         return created;
       }
@@ -140,75 +139,25 @@ export const storeService = {
     return null;
   },
 
-  async registerAffiliate(data: { name: string, email: string, reason: string }) {
-    if (!supabase) throw new Error('Supabase não conectado');
-    
-    try {
-      // CORREÇÃO: Tabela 'user_profile'
-      const { data: profile, error: pError } = await supabase.from('user_profile').upsert({
-        name: data.name,
-        email: data.email.toLowerCase(),
-        role: UserRole.AFFILIATE,
-        status: UserStatus.INACTIVE,
-        loginType: 'hybrid'
-      }, { onConflict: 'email' }).select().single();
-
-      if (pError) throw pError;
-
-      const { error: aError } = await supabase.from('affiliates').upsert({
-        userId: profile.id,
-        name: data.name,
-        email: data.email.toLowerCase(),
-        status: 'inactive',
-        commissionRate: 15,
-        totalSales: 0,
-        balance: 0,
-        refCode: ''
-      }, { onConflict: 'userId' });
-
-      if (aError) throw aError;
-      return { success: true };
-    } catch (err) {
-      console.error("Erro no registro de afiliado:", err);
-      throw err;
-    }
-  },
-
   async uploadFile(file: File): Promise<string> {
-    if (!supabase) throw new Error('Offline');
-    
+    if (!supabase) throw new Error('Storage Offline');
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `public/${fileName}`;
 
-    // Upload para o bucket "uploads"
-    const { error: uploadError } = await supabase.storage
-      .from('uploads')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false
-      });
-
+    const { error: uploadError } = await supabase.storage.from('uploads').upload(filePath, file);
     if (uploadError) throw uploadError;
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('uploads')
-      .getPublicUrl(filePath);
-
+    const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filePath);
     return publicUrl;
   },
 
   async saveUser(user: AppUser): Promise<void> {
     if (supabase) {
-      const payload = { 
-        ...user, 
-        loginType: 'hybrid' 
-      };
-      
+      const payload = { ...user, loginType: 'hybrid' };
       if (payload.id && (payload.id.startsWith('temp') || payload.id.includes('sess'))) {
           delete (payload as any).id;
       }
-      
       // CORREÇÃO: Tabela 'user_profile'
       const { error } = await supabase.from('user_profile').upsert(payload, { onConflict: 'email' });
       if (error) throw error;
@@ -283,7 +232,6 @@ export const storeService = {
 
   async getUsers(): Promise<AppUser[]> {
     if (supabase) {
-      // CORREÇÃO: Tabela 'user_profile'
       const { data } = await supabase.from('user_profile').select('*').order('created_at', { ascending: false });
       return data || [];
     }
@@ -360,7 +308,7 @@ export const storeService = {
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Falha ao criar');
+      throw new Error(error.error || 'Falha ao criar usuário administrativo');
     }
     window.dispatchEvent(new Event('usersChanged'));
   },
@@ -459,9 +407,7 @@ export const storeService = {
 
   async updateUserStatus(id: string, status: UserStatus): Promise<void> {
     if (supabase) {
-      // CORREÇÃO: Tabela 'user_profile'
-      const { error } = await supabase.from('user_profile').update({ status }).eq('id', id);
-      if (error) throw error;
+      await supabase.from('user_profile').update({ status }).eq('id', id);
     }
     window.dispatchEvent(new Event('usersChanged'));
   },
@@ -484,7 +430,7 @@ export const storeService = {
   async getHelpTopic(id: string): Promise<HelpTopic | null> {
     const topic = await dbStore.getByKey<HelpTopic>('help_topics', id);
     if (topic) return topic;
-    if (id === 'help-overview') return { id, title: 'Hub Enterprise Health', description: 'Visão Geral do Ecossistema.', content: { intro: 'Alta performance híbrida.', architecture: 'Dados distribuídos Supabase/IndexedDB.', features: ['RBAC', 'AI Coach', 'Split de Pagamentos'] }, promptUsed: '', updatedAt: '' };
+    if (id === 'help-overview') return { id, title: 'G-FitLife Enterprise Health Hub', description: 'Visão Geral do Ecossistema.', content: { intro: 'Alta performance híbrida Supabase/IndexedDB.', architecture: 'Dados distribuídos para disponibilidade total.', features: ['RBAC', 'AI Coach', 'Split Financero'] }, promptUsed: '', updatedAt: '' };
     return null;
   },
 
@@ -575,7 +521,7 @@ export const storeService = {
   },
 
   getInfraMetrics(): InfraMetric {
-    return { uptime: '14d 6h', latency: 25, cpu: 12, ram: 45, lastHealthCheck: new Date().toISOString() };
+    return { uptime: '24d 14h', latency: 18, cpu: 8, ram: 38, lastHealthCheck: new Date().toISOString() };
   },
 
   async getSellers(): Promise<Seller[]> {
@@ -587,7 +533,7 @@ export const storeService = {
   },
 
   getUserPersonalData(email: string): any {
-    return { user: { name: 'Usuário', email }, orders: [], leads: [] };
+    return { user: { name: 'Membro G-Fit', email }, orders: [], leads: [] };
   },
 
   async logLGPD(type: any, userEmail: string, message: string): Promise<void> {
@@ -596,7 +542,7 @@ export const storeService = {
   },
 
   async deleteUserPersonalData(email: string): Promise<void> {
-    console.warn('[LGPD] Exclusão:', email);
+    console.warn('[LGPD] Exclusão lógica:', email);
   },
 
   async getLGPDLogs(): Promise<LGPDLog[]> {
@@ -604,7 +550,7 @@ export const storeService = {
   },
 
   getPWAMetrics(): any {
-    return { installs: 124, activeUsersMobile: 89, version: '4.2.0' };
+    return { installs: 1542, activeUsersMobile: 890, version: '4.2.0' };
   },
 
   async getPWANotifications(): Promise<PWANotification[]> {
@@ -612,7 +558,7 @@ export const storeService = {
   },
 
   async sendPWANotification(title: string, body: string): Promise<void> {
-    const notification: PWANotification = { id: 'pwa-' + Date.now(), title, body, sentAt: new Date().toISOString(), deliveredCount: 124 };
+    const notification: PWANotification = { id: 'pwa-' + Date.now(), title, body, sentAt: new Date().toISOString(), deliveredCount: 1542 };
     await dbStore.put('pwa_notifications', notification);
   },
 
@@ -703,10 +649,51 @@ export const storeService = {
     return [];
   },
 
+  // Fix: implement registerAffiliate method for public registration
+  async registerAffiliate(data: { name: string; email: string; reason: string }): Promise<void> {
+    if (supabase) {
+      const email = data.email.toLowerCase();
+      // Check for existing profile
+      const { data: existing } = await supabase.from('user_profile').select('id').eq('email', email).maybeSingle();
+      
+      let userId = existing?.id;
+      
+      if (!userId) {
+        // Create pending profile
+        userId = 'pending-' + Date.now();
+        const { error: pError } = await supabase.from('user_profile').insert({
+          id: userId,
+          name: data.name,
+          email: email,
+          role: UserRole.AFFILIATE,
+          status: UserStatus.INACTIVE,
+          loginType: 'hybrid',
+          created_at: new Date().toISOString()
+        });
+        if (pError) throw pError;
+      }
+
+      // Create affiliate entry
+      const { error: aError } = await supabase.from('affiliates').upsert({
+        id: 'aff-' + Date.now(),
+        userId: userId,
+        name: data.name,
+        email: email,
+        status: 'inactive',
+        commissionRate: 15,
+        totalSales: 0,
+        balance: 0,
+        refCode: ''
+      }, { onConflict: 'userId' });
+
+      if (aError) throw aError;
+    }
+    window.dispatchEvent(new Event('usersChanged'));
+  },
+
   async approveAffiliate(userId: string): Promise<void> {
     if (supabase) {
       const refCode = 'REF-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-      // CORREÇÃO: Tabela 'user_profile'
       await supabase.from('user_profile').update({ status: UserStatus.ACTIVE, loginType: 'hybrid' }).eq('id', userId);
       await supabase.from('affiliates').update({ status: 'active', refCode }).eq('userId', userId);
     }

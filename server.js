@@ -16,7 +16,7 @@ async function seedMasterUser() {
     const email = process.env.MASTER_EMAIL || 'admin@system.local';
     const password = process.env.MASTER_PASSWORD || 'admin123';
 
-    console.log('[CORE-SEED] Iniciando validação de infraestrutura...');
+    console.log('[CORE-SEED] Verificando integridade da base Master...');
     
     // Verificação de existência do usuário no Auth via listUsers
     const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
@@ -25,7 +25,7 @@ async function seedMasterUser() {
     let targetUser = usersData.users.find(u => u.email === email);
 
     if (!targetUser) {
-      console.log('[CORE-SEED] Criando credenciais Master no Auth Service...');
+      console.log('[CORE-SEED] Criando conta Master prioritária...');
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
@@ -44,14 +44,15 @@ async function seedMasterUser() {
         email,
         role: 'admin_master',
         status: 'active',
+        loginType: 'hybrid',
         created_at: new Date().toISOString()
       }, { onConflict: 'email' });
 
       if (profileError) throw profileError;
-      console.log('[CORE-SEED] Infraestrutura Master pronta para uso.');
+      console.log('[CORE-SEED] Infraestrutura Master G-FitLife operacional.');
     }
   } catch (err) {
-    console.error('[CORE-SEED] Falha no processo de seed:', err.message);
+    console.error('[CORE-SEED] Falha crítica no Seed:', err.message);
   }
 }
 
@@ -72,7 +73,6 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // Login via Supabase Auth
     const { data, error } = await supabaseAdmin.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password: password
@@ -80,7 +80,6 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (error) return res.status(401).json({ error: 'Credenciais inválidas ou acesso negado.' });
 
-    // Busca do perfil para retorno completo
     const { data: profile } = await supabaseAdmin
       .from('user_profile')
       .select('*')
@@ -93,7 +92,7 @@ app.post('/api/auth/login', async (req, res) => {
       profile 
     });
   } catch (err) {
-    res.status(500).json({ error: 'Falha interna no servidor de autenticação.' });
+    res.status(500).json({ error: 'Falha interna no motor de autenticação.' });
   }
 });
 
@@ -103,6 +102,10 @@ app.post('/api/admin/create-user', async (req, res) => {
   try {
     const { email, password, name, role } = req.body;
     
+    // Validação se já existe no perfil para evitar conflito antes de criar no Auth
+    const { data: existing } = await supabaseAdmin.from('user_profile').select('id').eq('email', email.toLowerCase()).maybeSingle();
+    if (existing) return res.status(400).json({ error: 'Este e-mail já está registrado na plataforma.' });
+
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -118,6 +121,7 @@ app.post('/api/admin/create-user', async (req, res) => {
       email,
       role,
       status: 'active',
+      loginType: 'hybrid',
       created_at: new Date().toISOString()
     });
 
@@ -128,7 +132,7 @@ app.post('/api/admin/create-user', async (req, res) => {
 
     res.status(201).json({ status: 'ok', userId: authUser.user.id });
   } catch (err) {
-    res.status(500).json({ error: 'Falha interna na criação' });
+    res.status(500).json({ error: 'Falha interna na criação de usuário' });
   }
 });
 
@@ -140,7 +144,7 @@ app.delete('/api/admin/delete-user', async (req, res) => {
     const masterEmail = process.env.MASTER_EMAIL || 'admin@system.local';
     
     if (user?.user?.email === masterEmail) {
-      return res.status(403).json({ error: 'Operação proibida para o Core Master' });
+      return res.status(403).json({ error: 'Operação proibida para a conta Master do sistema.' });
     }
 
     await supabaseAdmin.auth.admin.deleteUser(userId);
@@ -148,12 +152,12 @@ app.delete('/api/admin/delete-user', async (req, res) => {
 
     res.status(200).json({ status: 'ok' });
   } catch (err) {
-    res.status(500).json({ error: 'Erro ao remover do Supabase' });
+    res.status(500).json({ error: 'Erro ao remover dados do Supabase' });
   }
 });
 
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', uptime: process.uptime() });
+  res.status(200).json({ status: 'ok', environment: process.env.NODE_ENV, uptime: process.uptime() });
 });
 
 const distPath = path.join(__dirname, 'dist');
