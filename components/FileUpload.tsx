@@ -48,7 +48,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ currentUrl, onUploadComplete, l
         <div className={`relative overflow-hidden bg-slate-200 border-2 border-white shadow-sm flex-shrink-0 transition-transform group-hover:scale-105 ${
           circular ? 'w-24 h-24 rounded-full' : 'w-32 h-20 rounded-2xl'
         }`}>
-          <img src={preview || 'https://via.placeholder.com/150'} className="w-full h-full object-cover" alt="Preview" />
+          <img src={preview || 'https://placehold.co/150x150'} className="w-full h-full object-cover" alt="Preview" />
           {isUploading && (
             <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center">
               <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
