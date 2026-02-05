@@ -1,6 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-// Fix: Added explicit import for process to ensure Node.js types are correctly recognized, resolving the error on process.cwd().
 import process from 'node:process';
 
 export default defineConfig(({ mode }) => {
@@ -17,8 +16,14 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       emptyOutDir: true,
-      cssCodeSplit: false,
-      sourcemap: false
+      sourcemap: false,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom'],
+          },
+        },
+      },
     },
     server: {
       port: 5173,

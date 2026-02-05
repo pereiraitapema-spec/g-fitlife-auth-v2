@@ -1,4 +1,3 @@
-
 import express from 'express';
 import path from 'path';
 import cors from 'cors';
@@ -22,6 +21,8 @@ async function seedMasterUser() {
     const email = (process.env.MASTER_EMAIL || 'admin@system.local').toLowerCase();
     const password = process.env.MASTER_PASSWORD || 'admin123';
 
+    if (!supabaseAdmin) return;
+
     const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     if (listError) throw listError;
 
@@ -40,6 +41,7 @@ async function seedMasterUser() {
     }
 
     if (targetUser) {
+      // Usando tabela singular user_profile
       await supabaseAdmin.from('user_profile').upsert({
         id: targetUser.id,
         name: 'G-FitLife Master',
@@ -52,7 +54,7 @@ async function seedMasterUser() {
       console.log('[GFIT-BACKEND] Sistema Master OK.');
     }
   } catch (err) {
-    console.error('[GFIT-BACKEND] Erro no Seed:', err.message);
+    console.warn('[GFIT-BACKEND] Seed ignorado ou falhou (Check keys):', err.message);
   }
 }
 
@@ -77,6 +79,7 @@ app.get('*', (req, res) => {
   if (path.extname(req.path)) {
     return res.status(404).send('Not found');
   }
+  // No Railway/Production, o build estará em /dist
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
