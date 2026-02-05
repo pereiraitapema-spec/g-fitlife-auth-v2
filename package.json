@@ -1,8 +1,8 @@
-
 {
   "name": "gfitlife-enterprise",
   "version": "4.2.1",
-  "description": "G-FitLife Enterprise Health & Wellness Hub",
+  "private": true,
+  "type": "module",
   "main": "server.js",
   "engines": {
     "node": ">=18.0.0"
@@ -14,8 +14,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "@google/genai": "^1.38.0",
     "@supabase/supabase-js": "^2.39.3",
     "cors": "^2.8.5",
@@ -26,8 +26,8 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "@types/react": "18.3.1",
-    "@types/react-dom": "18.3.1",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.17",
     "postcss": "^8.4.35",

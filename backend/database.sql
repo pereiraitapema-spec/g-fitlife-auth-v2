@@ -1,4 +1,5 @@
--- 1. Tabela singular user_profile (Regra permanente)
+
+-- 1. Tabela singular user_profile (Regra suprema)
 CREATE TABLE IF NOT EXISTS public.user_profile (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,
@@ -84,18 +85,12 @@ ALTER TABLE public.banners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
 -- POLICIES BÁSICAS
--- Produtos e Banners: Leitura pública
 CREATE POLICY "Leitura pública de produtos" ON public.products FOR SELECT USING (true);
 CREATE POLICY "Leitura pública de banners" ON public.banners FOR SELECT USING (true);
 CREATE POLICY "Leitura pública de settings" ON public.core_settings FOR SELECT USING (true);
-
--- Perfil: Apenas o dono ou Service Role
 CREATE POLICY "Perfil visível pelo próprio usuário" ON public.user_profile FOR SELECT USING (auth.uid() = id);
 
--- Pedidos: Apenas o dono
-CREATE POLICY "Pedidos visíveis pelo próprio comprador" ON public.orders FOR SELECT USING (auth.jwt() ->> 'email' = customer_email);
-
--- TRIGGER PARA AUTO-CRIAÇÃO DE PERFIL NO AUTH SIGNUP
+-- TRIGGER PARA AUTO-CRIAÇÃO DE PERFIL NO AUTH SIGNUP (SINGULAR user_profile)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -110,20 +105,3 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
-
--- CONFIGURAÇÃO DE STORAGE PARA BUCKET 'uploads'
--- Garante que o bucket existe
-INSERT INTO storage.buckets (id, name, public) 
-VALUES ('uploads', 'uploads', true)
-ON CONFLICT (id) DO NOTHING;
-
--- Políticas de Storage
-CREATE POLICY "Permitir upload para usuários autenticados"
-ON storage.objects FOR INSERT 
-TO authenticated 
-WITH CHECK (bucket_id = 'uploads');
-
-CREATE POLICY "Permitir visualização pública de arquivos"
-ON storage.objects FOR SELECT 
-TO public 
-USING (bucket_id = 'uploads');

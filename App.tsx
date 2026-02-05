@@ -112,6 +112,11 @@ const App: React.FC = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  const triggerFeedback = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setFeedback({ message, type });
+    setTimeout(() => setFeedback(null), 3500);
+  };
+
   const handleRoleLanding = (role: UserRole) => {
     const staffRoles = [
       UserRole.ADMIN_MASTER, 
@@ -135,27 +140,20 @@ const App: React.FC = () => {
 
   const syncAuth = async () => {
     if (!supabase) return;
-    
-    // Pegar sessão atual (pode vir de um redirect OAuth)
     const { data: { session: currentSession } } = await supabase.auth.getSession();
     
     if (currentSession) {
       const profile = await storeService.getProfileAfterLogin(currentSession.user.id);
-      
       if (profile) {
         if (profile.status === UserStatus.ACTIVE) {
           const newSession = storeService.createSession(profile);
           setSession(newSession);
           handleRoleLanding(profile.role);
-          setFeedback({ message: `Bem-vindo, ${profile.name}!`, type: 'success' });
-          setTimeout(() => setFeedback(null), 3000);
+          triggerFeedback(`Bem-vindo, ${profile.name}!`);
         } else {
-          setAuthError('Sua conta está inativa ou aguardando aprovação.');
+          setAuthError('Conta inativa.');
           await supabase.auth.signOut();
         }
-      } else {
-        setAuthError('Perfil não encontrado para este e-mail.');
-        await supabase.auth.signOut();
       }
     }
   };
@@ -186,8 +184,7 @@ const App: React.FC = () => {
       if (res.success && res.session) {
         setSession(res.session);
         handleRoleLanding(res.session.userRole);
-        setFeedback({ message: 'Acesso Autorizado!', type: 'success' });
-        setTimeout(() => setFeedback(null), 3000);
+        triggerFeedback('Acesso Autorizado!');
       } else {
         setAuthError(res.error || 'Credenciais inválidas');
       }
@@ -201,13 +198,18 @@ const App: React.FC = () => {
     setSession(null);
     setViewMode('store');
     setCurrentRoute('public-home');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    triggerFeedback('Sessão encerrada.');
   };
 
   const handleNavigate = (route: Route) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setCurrentRoute(route);
     if (window.innerWidth <= 1024) setIsSidebarOpen(false);
+  };
+
+  const handleAddToCart = (p: Product) => {
+    setCart(prev => [...prev, p]);
+    triggerFeedback(`${p.name} adicionado!`);
   };
 
   if (!isSystemReady) {
@@ -222,45 +224,21 @@ const App: React.FC = () => {
   if (viewMode === 'admin' && !session) {
     return (
       <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl animate-in zoom-in-95 duration-700">
+        <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl">
           <div className="text-center space-y-6">
-            <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl shadow-emerald-500/20">G</div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">G-Fit Hub Login</h1>
-            
-            {authError && (
-              <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase border border-red-100 animate-bounce">
-                {authError}
-              </div>
-            )}
-
+            <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl">G</div>
+            <h1 className="text-3xl font-black text-slate-900 uppercase">G-Fit Login</h1>
+            {authError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase">{authError}</div>}
             <form onSubmit={handleLogin} className="space-y-4 pt-4 text-left">
-               <div className="space-y-1">
-                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">E-mail Corporativo</label>
-                 <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@gfitlife.io" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
-               </div>
-               <div className="space-y-1">
-                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Senha Segura</label>
-                 <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••••" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner focus:ring-4 focus:ring-emerald-500/10" required />
-               </div>
-               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all shadow-xl active:scale-95">Autenticar agora</button>
+               <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@gfitlife.io" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
+               <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••••" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
+               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all">Autenticar</button>
             </form>
-
-            <div className="relative py-4">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
-              <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest"><span className="bg-white px-4 text-slate-400">ou escolha sua conta</span></div>
-            </div>
-
-            <button 
-              type="button"
-              disabled={isLoggingIn}
-              onClick={() => storeService.loginWithGoogle()} 
-              className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
-            >
+            <button type="button" onClick={() => storeService.loginWithGoogle()} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50">
               <img src="https://img.icons8.com/color/24/google-logo.png" alt="Google" className="w-5 h-5" />
-              Entrar com Google
+              Google SSO
             </button>
-
-            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase underline mt-4 block mx-auto">Voltar para a vitrine pública</button>
+            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 uppercase underline mt-4">Vitrine Pública</button>
           </div>
         </div>
       </div>
@@ -270,8 +248,8 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden relative">
       {feedback && (
-        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-10 pointer-events-none">
-          <div className={`px-12 py-5 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest pointer-events-auto ${feedback.type === 'error' ? 'bg-red-900' : 'bg-slate-900'}`}>
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[500] animate-in slide-in-from-top-10">
+          <div className={`px-12 py-5 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest ${feedback.type === 'error' ? 'bg-red-900' : 'bg-slate-900'}`}>
             {feedback.message}
           </div>
         </div>
@@ -280,15 +258,15 @@ const App: React.FC = () => {
       {viewMode === 'store' ? (
         <div className="min-h-screen bg-white flex flex-col relative w-full overflow-y-auto custom-scrollbar">
            <PublicHeader onNavigate={handleNavigate} cartCount={cart.length} onOpenCoach={() => setIsCoachOpen(true)} onSwitchMode={() => setViewMode('admin')} user={session} />
-           <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-12 relative">
-              {currentRoute === 'public-home' && <PublicHome onNavigate={handleNavigate} onAddToCart={p => setCart([...cart, p])} />}
+           <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-12">
+              {currentRoute === 'public-home' && <PublicHome onNavigate={handleNavigate} onAddToCart={handleAddToCart} />}
               {currentRoute === 'departments' && <PublicDepartments onNavigate={handleNavigate} />}
-              {currentRoute === 'store-catalog' && <PublicCatalog onBuy={() => handleNavigate('checkout')} />}
-              {currentRoute === 'store-offers' && <PublicCatalog onBuy={() => handleNavigate('checkout')} showOnlyOffers />}
-              {currentRoute === 'checkout' && <CheckoutPage product={null} onComplete={() => handleNavigate('customer-portal')} />}
+              {currentRoute === 'store-catalog' && <PublicCatalog onBuy={handleAddToCart} />}
+              {currentRoute === 'store-offers' && <PublicCatalog onBuy={handleAddToCart} showOnlyOffers />}
+              {currentRoute === 'checkout' && <CheckoutPage product={cart.length > 0 ? cart[0] : null} onComplete={() => { setCart([]); handleNavigate('customer-portal'); }} />}
               {currentRoute === 'public-contact' && <PublicContact />}
               {currentRoute === 'affiliate-register' && <PublicAffiliateRegister onComplete={() => handleNavigate('public-home')} />}
-              {currentRoute === 'favorites' && <PublicFavorites user={session} onAddToCart={p => setCart([...cart, p])} onNavigate={handleNavigate} />}
+              {currentRoute === 'favorites' && <PublicFavorites user={session} onAddToCart={handleAddToCart} onNavigate={handleNavigate} />}
               {currentRoute === 'affiliate-portal' && <AffiliatePortal user={session} onNavigate={handleNavigate} />}
               {currentRoute === 'customer-portal' && <CustomerPortal user={session} onNavigate={handleNavigate} />}
            </main>
@@ -300,7 +278,7 @@ const App: React.FC = () => {
       ) : (
         <>
           <Sidebar isOpen={isSidebarOpen} currentRoute={currentRoute} onNavigate={handleNavigate} userRole={session!.userRole} onLogout={handleLogout} onSwitchToStore={() => setViewMode('store')} />
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             <HeaderSimple onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} title={currentRoute.replace('-', ' ').toUpperCase()} user={session!} />
             <main className="flex-1 overflow-y-auto p-4 md:p-10 custom-scrollbar bg-slate-50">
               <div className="max-w-7xl mx-auto pb-24 md:pb-20">

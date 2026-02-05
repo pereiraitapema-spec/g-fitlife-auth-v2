@@ -1,10 +1,17 @@
-const express = require('express');
-const path = require('path');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const { supabaseAdmin } = require('./backend/supabaseAdmin');
-require('dotenv').config();
+
+import express from 'express';
+import path from 'path';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import { fileURLToPath } from 'url';
+import { supabaseAdmin } from './backend/supabaseAdmin.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,7 +46,7 @@ async function seedMasterUser() {
         email: email,
         role: 'admin_master',
         status: 'active',
-        loginType: 'hybrid',
+        login_type: 'hybrid',
         created_at: new Date().toISOString()
       }, { onConflict: 'email' });
       console.log('[GFIT-BACKEND] Sistema Master OK.');
@@ -67,7 +74,6 @@ const distPath = path.resolve(__dirname, 'dist');
 app.use(express.static(distPath));
 
 app.get('*', (req, res) => {
-  // Ignora requests por assets que não existem (extensões)
   if (path.extname(req.path)) {
     return res.status(404).send('Not found');
   }

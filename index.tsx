@@ -1,18 +1,17 @@
-
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import './index.css'; // Importação obrigatória para bundle CSS via Vite/PostCSS
+import './index.css';
 import App from './App';
 
 const container = document.getElementById('root');
 
 if (!container) {
-  console.error("Falha fatal: Elemento #root não encontrado no DOM.");
-} else {
-  const root = createRoot(container);
-  root.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
+  throw new Error("Elemento #root não encontrado no DOM.");
 }
+
+const root = createRoot(container);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);

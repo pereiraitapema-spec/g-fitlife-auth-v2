@@ -1,25 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 
-/**
- * CLIENTE SUPABASE PARA FRONTEND
- * Configuração resiliente para evitar tela branca.
- */
+const getEnv = (key) => {
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key];
+  }
+  return '';
+};
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+const supabaseUrl = getEnv('SUPABASE_URL');
+const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY');
 
 let supabaseInstance = null;
 
-if (supabaseUrl && supabaseAnonKey && supabaseUrl !== 'https://seu-projeto-id.supabase.co') {
+if (supabaseUrl && supabaseAnonKey && !supabaseUrl.includes('seu-projeto-id')) {
   try {
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
-    console.log("[GFIT-SYSTEM] Supabase Cloud Conectado.");
   } catch (err) {
-    console.error("[GFIT-SYSTEM] Erro ao instanciar Supabase:", err);
+    console.warn("[GFIT-SYSTEM] Falha ao inicializar Supabase:", err.message);
   }
 } else {
-  console.warn("[GFIT-SYSTEM] Ambiente operando em modo OFFLINE. Configure SUPABASE_URL e SUPABASE_ANON_KEY.");
+  console.info("[GFIT-SYSTEM] Operando em modo de demonstração OFFLINE (Chaves ausentes).");
 }
 
 export const supabase = supabaseInstance;
-export const getSupabase = () => supabase;
