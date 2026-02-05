@@ -1,4 +1,3 @@
-
 -- 1. Tabela singular user_profile (Regra permanente)
 CREATE TABLE IF NOT EXISTS public.user_profile (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -111,3 +110,20 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- CONFIGURAÇÃO DE STORAGE PARA BUCKET 'uploads'
+-- Garante que o bucket existe
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('uploads', 'uploads', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Políticas de Storage
+CREATE POLICY "Permitir upload para usuários autenticados"
+ON storage.objects FOR INSERT 
+TO authenticated 
+WITH CHECK (bucket_id = 'uploads');
+
+CREATE POLICY "Permitir visualização pública de arquivos"
+ON storage.objects FOR SELECT 
+TO public 
+USING (bucket_id = 'uploads');
