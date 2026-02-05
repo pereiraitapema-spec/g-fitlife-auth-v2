@@ -1,6 +1,7 @@
+
 {
   "name": "gfitlife-enterprise",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "G-FitLife Enterprise Health & Wellness Hub",
   "main": "server.js",
   "engines": {

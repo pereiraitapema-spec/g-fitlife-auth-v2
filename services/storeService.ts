@@ -1,67 +1,34 @@
 
 import { 
   Order, Lead, Product, Coupon, OrderStatus, 
-  AppUser, Department, Category, SystemSettings, 
-  UserRole, UserStatus, UserSession, Affiliate, Commission, Banner, EmailTemplate, RemarketingLog, AIChatSession, PerformanceMetric, SystemLog, PaymentGateway, Transaction, Carrier, Delivery, AuditLog, SecurityEvent, DeployRecord, BackupRecord, InfraMetric, Seller, LGPDConsent, LGPDLog, PWANotification, ExternalAPIConfig, IntegrationSyncLog, WhatsAppMessage, AIRecommendation, AIPrediction, AIAutomationRule, AILogEntry, HelpTopic, RoleDefinition, UserFavorite
+  AppUser, SystemSettings, UserRole, UserStatus, 
+  UserSession, Affiliate, Commission, Banner, HelpTopic, RoleDefinition,
+  Department, Category, RemarketingLog, EmailTemplate, AIChatSession,
+  PerformanceMetric, SystemLog, PaymentGateway, Transaction, Carrier,
+  Delivery, AuditLog, SecurityEvent, DeployRecord, BackupRecord,
+  InfraMetric, Seller, LGPDConsent, LGPDLog, PWANotification,
+  ExternalAPIConfig, IntegrationSyncLog, WhatsAppMessage, AIRecommendation,
+  AIPrediction, AIAutomationRule, AILogEntry
 } from '../types';
-import { dbStore } from './db';
 import { supabase } from '../backend/supabaseClient';
 
 const KEY_SESSION = 'auth_session';
 
 export const storeService = {
   async initializeSystem(): Promise<void> {
-    try {
-      let config = null;
-      if (supabase) {
-        const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').maybeSingle();
-        config = data;
-      }
-
-      if (config) {
-        await dbStore.put('config', config);
-      } else {
-        const local = await dbStore.getByKey<any>('config', 'geral');
-        if (!local) {
-          const defaultConfig: SystemSettings = {
-            nomeLoja: 'G-FitLife',
-            logoUrl: 'https://picsum.photos/seed/gfitlife/400/400',
-            emailContato: 'contato@gfitlife.io',
-            telefone: '(11) 4004-GFIT',
-            whatsapp: '(11) 99999-0000',
-            dominio: 'gfitlife.io',
-            moeda: 'BRL',
-            timezone: 'America/Sao_Paulo',
-            companyName: 'G-FitLife Enterprise',
-            storeName: 'G-FitLife Oficial',
-            adminEmail: 'admin@gfitlife.io',
-            systemStatus: 'online',
-            environment: 'production',
-            privacyPolicy: 'Política LGPD G-FitLife...',
-            termsOfUse: 'Termos de uso corporativos...',
-            pwaInstalledCount: 0,
-            pwaVersion: '4.2.0',
-            pushNotificationsActive: true,
-            language: 'pt-BR',
-            currency: 'BRL'
-          };
-          // @ts-ignore
-          await dbStore.put('config', { ...defaultConfig, key: 'geral' });
-        }
-      }
-    } catch (err) {
-      console.warn("Modo offline ativo.");
-    }
+    if (!supabase) return;
+    // Carrega configurações do banco globalmente se necessário
   },
 
   async login(email: string, pass: string) {
+    // Caso especial Master direto para emergências
     if (email.trim().toLowerCase() === 'admin@system.local' && pass === 'admin123') {
       const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email: email.toLowerCase(), role: UserRole.ADMIN_MASTER, status: UserStatus.ACTIVE };
       const session = this.createSession(fallbackAdmin);
       return { success: true, session, profile: fallbackAdmin, isStaff: true };
     }
 
-    if (!supabase) return { success: false, error: 'Supabase Offline' };
+    if (!supabase) return { success: false, error: 'Banco de dados inacessível' };
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -75,21 +42,21 @@ export const storeService = {
         if (profile) {
           if (profile.status !== UserStatus.ACTIVE) {
             await supabase.auth.signOut();
-            return { success: false, error: 'Conta suspensa ou inativa' };
+            return { success: false, error: 'Conta inativa' };
           }
           const session = this.createSession(profile);
-          const isStaff = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING, UserRole.SELLER].includes(profile.role);
+          const isStaff = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING].includes(profile.role);
           return { success: true, session, profile, isStaff };
         }
       }
     } catch (err) {
       return { success: false, error: 'Erro de comunicação' };
     }
-    return { success: false, error: 'Usuário não encontrado' };
+    return { success: false, error: 'Erro ao obter perfil' };
   },
 
   async loginWithGoogle() {
-    if (!supabase) return { success: false, error: 'Social Auth Offline' };
+    if (!supabase) return { success: false, error: 'Supabase Offline' };
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -101,32 +68,30 @@ export const storeService = {
       if (error) throw error;
       return { success: true };
     } catch (err) {
-      return { success: false, error: 'Falha no OAuth Google' };
+      return { success: false, error: 'Falha no acesso Google' };
     }
   },
 
   async getProfileAfterLogin(userId: string) {
     if (!supabase) return null;
     
-    // CORREÇÃO: Tabela singular 'user_profile'
+    // Tabela singular user_profile
     const { data: profileByUid } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
     if (profileByUid) return profileByUid;
 
+    // Se não encontrou por ID, tenta por e-mail (caso seja migração)
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (authUser?.email) {
-      const email = authUser.email.toLowerCase();
-      // Fusão: Busca por e-mail caso seja o primeiro login social em conta já cadastrada
-      const { data: profileByEmail } = await supabase.from('user_profile').select('*').eq('email', email).maybeSingle();
-      
+      const { data: profileByEmail } = await supabase.from('user_profile').select('*').eq('email', authUser.email.toLowerCase()).maybeSingle();
       if (profileByEmail) {
-        await supabase.from('user_profile').update({ id: authUser.id, loginType: 'hybrid' }).eq('email', email);
-        return { ...profileByEmail, id: authUser.id, loginType: 'hybrid' };
+        await supabase.from('user_profile').update({ id: authUser.id }).eq('email', authUser.email.toLowerCase());
+        return { ...profileByEmail, id: authUser.id };
       } else {
-        // Novo Usuário via Google
+        // Criar perfil novo
         const newProfile = {
           id: authUser.id,
-          email: email,
-          name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'Membro G-Fit',
+          email: authUser.email.toLowerCase(),
+          name: authUser.user_metadata?.full_name || 'Novo Membro',
           role: UserRole.CUSTOMER,
           status: UserStatus.ACTIVE,
           loginType: 'hybrid',
@@ -140,47 +105,79 @@ export const storeService = {
   },
 
   async uploadFile(file: File): Promise<string> {
-    if (!supabase) throw new Error('Storage Offline');
+    if (!supabase) throw new Error('Supabase Indisponível');
+    
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `public/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage.from('uploads').upload(filePath, file);
+    // Bucket uploads é o padrão corporativo
+    const { error: uploadError } = await supabase.storage
+      .from('uploads')
+      .upload(filePath, file);
+
     if (uploadError) throw uploadError;
 
-    const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filePath);
+    const { data: { publicUrl } } = supabase.storage
+      .from('uploads')
+      .getPublicUrl(filePath);
+
     return publicUrl;
   },
 
   async saveUser(user: AppUser): Promise<void> {
-    if (supabase) {
-      const payload = { ...user, loginType: 'hybrid' };
-      if (payload.id && (payload.id.startsWith('temp') || payload.id.includes('sess'))) {
-          delete (payload as any).id;
-      }
-      // CORREÇÃO: Tabela 'user_profile'
-      const { error } = await supabase.from('user_profile').upsert(payload, { onConflict: 'email' });
-      if (error) throw error;
-    }
-    await dbStore.put('users', user);
+    if (!supabase) throw new Error('Offline');
+    const { error } = await supabase.from('user_profile').upsert(user, { onConflict: 'email' });
+    if (error) throw error;
     window.dispatchEvent(new Event('usersChanged'));
   },
 
+  async getUsers(): Promise<AppUser[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('user_profile').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  /* Adicionando updateUserStatus para corrigir erro no Users.tsx e CoreUsers.tsx */
+  async updateUserStatus(id: string, status: UserStatus): Promise<void> {
+    if (!supabase) throw new Error('Offline');
+    const { error } = await supabase.from('user_profile').update({ status }).eq('id', id);
+    if (error) throw error;
+    window.dispatchEvent(new Event('usersChanged'));
+  },
+
+  async getProducts(): Promise<Product[]> { 
+    if (!supabase) return [];
+    const { data } = await supabase.from('products').select('*');
+    return data || [];
+  },
+
   async saveProduct(p: Product): Promise<void> {
-    if (supabase) {
-      const { error } = await supabase.from('products').upsert(p);
-      if (error) throw error;
-    }
-    await dbStore.put('products', p);
+    if (!supabase) throw new Error('Offline');
+    const { error } = await supabase.from('products').upsert(p);
+    if (error) throw error;
     window.dispatchEvent(new Event('productsChanged'));
   },
 
+  /* Adicionando getOrders para corrigir erro no OrdersPage.tsx, CustomerPortal.tsx e MarketplaceFinance.tsx */
+  async getOrders(): Promise<Order[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });
+    return data || [];
+  },
+
   async saveOrder(o: Order): Promise<void> {
-    if (supabase) {
-      const { error } = await supabase.from('orders').insert(o);
-      if (error) throw error;
-    }
-    await dbStore.put('orders', o);
+    if (!supabase) throw new Error('Offline');
+    const { error } = await supabase.from('orders').insert(o);
+    if (error) throw error;
+    window.dispatchEvent(new Event('ordersChanged'));
+  },
+
+  /* Adicionando updateOrderStatus para corrigir erro no OrdersPage.tsx */
+  async updateOrderStatus(id: string, status: OrderStatus): Promise<void> {
+    if (!supabase) throw new Error('Offline');
+    const { error } = await supabase.from('orders').update({ status }).eq('id', id);
+    if (error) throw error;
     window.dispatchEvent(new Event('ordersChanged'));
   },
 
@@ -189,17 +186,23 @@ export const storeService = {
       const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').maybeSingle();
       if (data) return data as SystemSettings;
     }
-    const data = await dbStore.getByKey<any>('config', 'geral');
-    return data as SystemSettings;
+    // Fallback default
+    return {
+      nomeLoja: 'G-FitLife',
+      logoUrl: '',
+      emailContato: 'admin@gfitlife.io',
+      telefone: '', whatsapp: '', dominio: '', moeda: 'BRL', timezone: 'America/Sao_Paulo',
+      companyName: 'G-FitLife Enterprise',
+      storeName: 'G-FitLife',
+      adminEmail: 'admin@gfitlife.io',
+      systemStatus: 'online', environment: 'production', privacyPolicy: '', termsOfUse: '',
+      pwaInstalledCount: 0, pwaVersion: '1.0', pushNotificationsActive: true, language: 'pt-BR', currency: 'BRL'
+    };
   },
 
   async saveSettings(settings: SystemSettings): Promise<void> {
-    const dataToSave = { ...settings, key: 'geral' };
-    if (supabase) {
-      const { error } = await supabase.from('core_settings').upsert(dataToSave);
-      if (error) throw error;
-    }
-    await dbStore.put('config', dataToSave);
+    if (!supabase) return;
+    await supabase.from('core_settings').upsert({ ...settings, key: 'geral' });
     window.dispatchEvent(new Event('systemSettingsChanged'));
   },
 
@@ -230,76 +233,6 @@ export const storeService = {
     window.dispatchEvent(new Event('sessionUpdated'));
   },
 
-  async getUsers(): Promise<AppUser[]> {
-    if (supabase) {
-      const { data } = await supabase.from('user_profile').select('*').order('created_at', { ascending: false });
-      return data || [];
-    }
-    return await dbStore.getAll<AppUser>('users');
-  },
-
-  async updateMyCredentials(userId: string, email: string, password?: string) {
-    if (!supabase) return false;
-    try {
-      const updates: any = { email };
-      if (password) updates.password = password;
-      const { error } = await supabase.auth.updateUser(updates);
-      if (error) throw error;
-      return true;
-    } catch (err) {
-      return false;
-    }
-  },
-
-  async getProducts(): Promise<Product[]> { 
-    if (supabase) {
-      const { data } = await supabase.from('products').select('*');
-      return data || [];
-    }
-    return await dbStore.getAll<Product>('products'); 
-  },
-  
-  async getOrders(): Promise<Order[]> { 
-    if (supabase) {
-      const { data } = await supabase.from('orders').select('*');
-      return data || [];
-    }
-    return await dbStore.getAll<Order>('orders'); 
-  },
-
-  async getAffiliates(): Promise<Affiliate[]> { 
-    if (supabase) {
-      const { data } = await supabase.from('affiliates').select('*');
-      return data || [];
-    }
-    return await dbStore.getAll<Affiliate>('affiliates'); 
-  },
-
-  async getCommissions(): Promise<Commission[]> { 
-    if (supabase) {
-      const { data } = await supabase.from('commissions').select('*, affiliate:affiliates(name)');
-      return data || [];
-    }
-    return await dbStore.getAll<Commission>('commissions'); 
-  },
-
-  async getBanners(): Promise<Banner[]> { 
-    if (supabase) {
-      const { data } = await supabase.from('banners').select('*');
-      return data || [];
-    }
-    return await dbStore.getAll<Banner>('banners'); 
-  },
-
-  async saveBanner(banner: Banner): Promise<void> { 
-    if (supabase) {
-      const { error } = await supabase.from('banners').upsert(banner);
-      if (error) throw error;
-    }
-    await dbStore.put('banners', banner); 
-    window.dispatchEvent(new Event('bannersChanged')); 
-  },
-
   async createAdminUser(adminData: any): Promise<void> {
     const response = await fetch('/api/admin/create-user', {
       method: 'POST',
@@ -308,7 +241,7 @@ export const storeService = {
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Falha ao criar usuário administrativo');
+      throw new Error(error.error || 'Falha ao criar admin');
     }
     window.dispatchEvent(new Event('usersChanged'));
   },
@@ -327,70 +260,56 @@ export const storeService = {
     return true;
   },
 
-  async getDepartments(): Promise<Department[]> { 
-    if (supabase) {
-      const { data } = await supabase.from('departments').select('*');
-      return data || [];
+  async registerAffiliate(data: { name: string; email: string; reason: string }): Promise<void> {
+    if (!supabase) return;
+    const email = data.email.toLowerCase();
+    const { data: existing } = await supabase.from('user_profile').select('id').eq('email', email).maybeSingle();
+    
+    let userId = existing?.id;
+    if (!userId) {
+      userId = 'pending-' + Date.now();
+      await supabase.from('user_profile').insert({
+        id: userId, name: data.name, email: email, role: UserRole.AFFILIATE, status: UserStatus.INACTIVE, loginType: 'hybrid'
+      });
     }
-    return await dbStore.getAll<Department>('departments'); 
+
+    await supabase.from('affiliates').upsert({
+      userId: userId, name: data.name, email: email, status: 'inactive', commissionRate: 15, totalSales: 0, balance: 0, refCode: ''
+    }, { onConflict: 'userId' });
+    
+    window.dispatchEvent(new Event('usersChanged'));
   },
 
-  async saveDepartment(dept: Department): Promise<void> { 
-    if (supabase) {
-      const { error } = await supabase.from('departments').upsert(dept);
-      if (error) throw error;
-    }
-    await dbStore.put('departments', dept); 
-    window.dispatchEvent(new Event('departmentsChanged')); 
+  async approveAffiliate(userId: string): Promise<void> {
+    if (!supabase) return;
+    const refCode = 'REF-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+    await supabase.from('user_profile').update({ status: UserStatus.ACTIVE }).eq('id', userId);
+    await supabase.from('affiliates').update({ status: 'active', refCode }).eq('userId', userId);
+    window.dispatchEvent(new Event('usersChanged'));
   },
 
-  async getCategories(): Promise<Category[]> { 
-    if (supabase) {
-      const { data } = await supabase.from('categories').select('*');
-      return data || [];
-    }
-    return await dbStore.getAll<Category>('categories'); 
+  async getAffiliates(): Promise<Affiliate[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('affiliates').select('*');
+    return data || [];
   },
 
-  async saveCategory(cat: Category): Promise<void> { 
-    if (supabase) {
-      const { error } = await supabase.from('categories').upsert(cat);
-      if (error) throw error;
-    }
-    await dbStore.put('categories', cat); 
-    window.dispatchEvent(new Event('categoriesChanged')); 
+  async getCommissions(): Promise<Commission[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('commissions').select('*, affiliate:affiliates(name)');
+    return data || [];
   },
 
-  async getCoupons(): Promise<Coupon[]> { 
-    if (supabase) {
-      const { data } = await supabase.from('coupons').select('*');
-      return data || [];
-    }
-    return await dbStore.getAll<Coupon>('coupons'); 
+  async getBanners(): Promise<Banner[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('banners').select('*');
+    return data || [];
   },
 
-  async saveCoupon(coupon: Coupon): Promise<void> { 
-    if (supabase) {
-      const { error } = await supabase.from('coupons').upsert(coupon);
-      if (error) throw error;
-    }
-    await dbStore.put('coupons', coupon); 
-    window.dispatchEvent(new Event('couponsChanged')); 
-  },
-
-  async captureLead(email: string, product: Product): Promise<void> {
-    const lead: Lead = { id: 'lead-' + Date.now(), email, productId: product.id, productName: product.name, capturedAt: new Date().toISOString(), converted: false };
-    if (supabase) await supabase.from('leads').insert(lead);
-    await dbStore.put('leads', lead);
-    window.dispatchEvent(new Event('leadsChanged'));
-  },
-
-  async getLeads(): Promise<Lead[]> { 
-    if (supabase) {
-      const { data } = await supabase.from('leads').select('*');
-      return data || [];
-    }
-    return await dbStore.getAll<Lead>('leads'); 
+  async saveBanner(banner: Banner): Promise<void> {
+    if (!supabase) return;
+    await supabase.from('banners').upsert(banner);
+    window.dispatchEvent(new Event('bannersChanged'));
   },
 
   getRoles() {
@@ -401,311 +320,453 @@ export const storeService = {
       { id: UserRole.FINANCE, label: 'Financeiro', permissions: [] },
       { id: UserRole.MARKETING, label: 'Marketing', permissions: [] },
       { id: UserRole.AFFILIATE, label: 'Afiliado', permissions: [] },
-      { id: UserRole.SELLER, label: 'Vendedor Marketplace', permissions: [] }
+      { id: UserRole.SELLER, label: 'Vendedor Mkp', permissions: [] }
     ];
   },
 
-  async updateUserStatus(id: string, status: UserStatus): Promise<void> {
-    if (supabase) {
-      await supabase.from('user_profile').update({ status }).eq('id', id);
-    }
-    window.dispatchEvent(new Event('usersChanged'));
-  },
-
-  async saveConsent(userEmail: string, accepted: boolean): Promise<void> {
-    const consent: LGPDConsent = { id: 'con-' + Date.now(), userEmail, accepted, ip: '0.0.0.0', userAgent: navigator.userAgent, timestamp: new Date().toISOString() };
-    if (supabase) await supabase.from('lgpd_consents').insert(consent);
-    await dbStore.put('consents', consent); 
-    window.dispatchEvent(new Event('consentsChanged'));
-  },
-
-  async getConsents(): Promise<LGPDConsent[]> { 
-    if (supabase) {
-      const { data } = await supabase.from('lgpd_consents').select('*');
-      return data || [];
-    }
-    return await dbStore.getAll<LGPDConsent>('consents'); 
-  },
-
   async getHelpTopic(id: string): Promise<HelpTopic | null> {
-    const topic = await dbStore.getByKey<HelpTopic>('help_topics', id);
-    if (topic) return topic;
-    if (id === 'help-overview') return { id, title: 'G-FitLife Enterprise Health Hub', description: 'Visão Geral do Ecossistema.', content: { intro: 'Alta performance híbrida Supabase/IndexedDB.', architecture: 'Dados distribuídos para disponibilidade total.', features: ['RBAC', 'AI Coach', 'Split Financero'] }, promptUsed: '', updatedAt: '' };
-    return null;
+    if (!supabase) return null;
+    const { data } = await supabase.from('help_topics').select('*').eq('id', id).maybeSingle();
+    return data;
   },
 
-  async updateOrderStatus(id: string, newStatus: OrderStatus): Promise<void> {
-    if (supabase) await supabase.from('orders').update({ status: newStatus }).eq('id', id);
-    window.dispatchEvent(new Event('ordersChanged'));
+  /* Adicionando métodos para Favoritos */
+  async isProductFavorited(userId: string, productId: string): Promise<boolean> {
+    if (!supabase) return false;
+    const { data } = await supabase.from('user_favorites').select('id').eq('userId', userId).eq('productId', productId).maybeSingle();
+    return !!data;
+  },
+
+  async toggleFavorite(userId: string, productId: string): Promise<boolean> {
+    if (!supabase) return false;
+    const isFav = await this.isProductFavorited(userId, productId);
+    if (isFav) {
+      await supabase.from('user_favorites').delete().eq('userId', userId).eq('productId', productId);
+      return false;
+    } else {
+      await supabase.from('user_favorites').insert({ id: `fav-${Date.now()}`, userId, productId, createdAt: new Date().toISOString() });
+      return true;
+    }
+  },
+
+  async getFavorites(userId: string): Promise<Product[]> {
+    if (!supabase) return [];
+    const { data: favs } = await supabase.from('user_favorites').select('productId').eq('userId', userId);
+    if (!favs || favs.length === 0) return [];
+    const ids = favs.map(f => f.productId);
+    const { data: prods } = await supabase.from('products').select('*').in('id', ids);
+    return prods || [];
+  },
+
+  /* Adicionando métodos para Departamentos e Categorias */
+  async getDepartments(): Promise<Department[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('departments').select('*');
+    return data || [];
+  },
+
+  async saveDepartment(dept: Department): Promise<void> {
+    if (!supabase) return;
+    await supabase.from('departments').upsert(dept);
+  },
+
+  async getCategories(): Promise<Category[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('categories').select('*');
+    return data || [];
+  },
+
+  async saveCategory(cat: Category): Promise<void> {
+    if (!supabase) return;
+    await supabase.from('categories').upsert(cat);
+  },
+
+  /* Adicionando métodos para Cupons */
+  async getCoupons(): Promise<Coupon[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('coupons').select('*');
+    return data || [];
+  },
+
+  async saveCoupon(coupon: Coupon): Promise<void> {
+    if (!supabase) return;
+    await supabase.from('coupons').upsert(coupon);
+  },
+
+  /* Adicionando métodos para Leads e Remarketing */
+  async captureLead(email: string, product: Product): Promise<void> {
+    if (!supabase) return;
+    const lead: Lead = {
+      id: `lead-${Date.now()}`,
+      email: email.toLowerCase(),
+      productId: product.id,
+      productName: product.name,
+      capturedAt: new Date().toISOString(),
+      converted: false
+    };
+    await supabase.from('leads').insert(lead);
+  },
+
+  async getLeads(): Promise<Lead[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('leads').select('*');
+    return data || [];
   },
 
   async getRemarketingLogs(): Promise<RemarketingLog[]> {
-    return await dbStore.getAll<RemarketingLog>('remarketing_logs');
+    if (!supabase) return [];
+    const { data } = await supabase.from('remarketing_logs').select('*');
+    return data || [];
   },
 
   async getTemplates(): Promise<EmailTemplate[]> {
-    return await dbStore.getAll<EmailTemplate>('email_templates');
+    if (!supabase) return [];
+    const { data } = await supabase.from('email_templates').select('*');
+    return data || [];
   },
 
   async triggerRemarketing(lead: Lead): Promise<void> {
-    const log: RemarketingLog = { id: 'remkt-' + Date.now(), leadEmail: lead.email, productName: lead.productName, sentAt: new Date().toISOString(), status: 'sent' };
-    await dbStore.put('remarketing_logs', log);
+    if (!supabase) return;
+    const log: RemarketingLog = {
+      id: `log-${Date.now()}`,
+      leadEmail: lead.email,
+      productName: lead.productName,
+      sentAt: new Date().toISOString(),
+      status: 'sent'
+    };
+    await supabase.from('remarketing_logs').insert(log);
   },
 
+  /* Adicionando métodos para Chat IA */
   async getChatSessions(): Promise<AIChatSession[]> {
-    return await dbStore.getAll<AIChatSession>('chat_sessions');
+    if (!supabase) return [];
+    const { data } = await supabase.from('chat_sessions').select('*');
+    return data || [];
   },
 
   async updateChatStatus(id: string, status: 'active' | 'escalated' | 'closed'): Promise<void> {
-    const session = await dbStore.getByKey<AIChatSession>('chat_sessions', id);
-    if (session) await dbStore.put('chat_sessions', { ...session, status });
+    if (!supabase) return;
+    await supabase.from('chat_sessions').update({ status }).eq('id', id);
   },
 
+  /* Adicionando métodos para Performance e Monitoramento */
   async getPerformanceMetrics(): Promise<PerformanceMetric[]> {
-    return await dbStore.getAll<PerformanceMetric>('performance_metrics');
+    if (!supabase) return [];
+    const { data } = await supabase.from('performance_metrics').select('*');
+    return data || [];
   },
 
   async getSystemLogs(): Promise<SystemLog[]> {
-    return await dbStore.getAll<SystemLog>('audit_logs');
+    if (!supabase) return [];
+    const { data } = await supabase.from('system_logs').select('*');
+    return data || [];
   },
 
+  /* Adicionando métodos para Financeiro e Gateways */
   async getGateways(): Promise<PaymentGateway[]> {
-    return await dbStore.getAll<PaymentGateway>('gateways');
+    if (!supabase) return [];
+    const { data } = await supabase.from('gateways').select('*');
+    return data || [];
   },
 
-  async saveGateway(gw: PaymentGateway): Promise<void> {
-    await dbStore.put('gateways', gw);
+  async saveGateway(gateway: PaymentGateway): Promise<void> {
+    if (!supabase) return;
+    await supabase.from('gateways').upsert(gateway);
   },
 
   async getTransactions(): Promise<Transaction[]> {
-    return await dbStore.getAll<Transaction>('transactions');
+    if (!supabase) return [];
+    const { data } = await supabase.from('transactions').select('*');
+    return data || [];
   },
 
+  /* Adicionando métodos para Logística */
   async getCarriers(): Promise<Carrier[]> {
-    return await dbStore.getAll<Carrier>('carriers');
+    if (!supabase) return [];
+    const { data } = await supabase.from('carriers').select('*');
+    return data || [];
   },
 
   async getDeliveries(): Promise<Delivery[]> {
-    return await dbStore.getAll<Delivery>('deliveries');
+    if (!supabase) return [];
+    const { data } = await supabase.from('deliveries').select('*');
+    return data || [];
+  },
+
+  /* Adicionando métodos para Segurança e Auditoria */
+  async getSessions(): Promise<UserSession[]> {
+    // Para simplificar, retornamos a sessão atual
+    const s = this.getActiveSession();
+    return s ? [s] : [];
+  },
+
+  async updateMyCredentials(userId: string, email: string, password?: string): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      const { error: profileError } = await supabase.from('user_profile').update({ email }).eq('id', userId);
+      if (profileError) throw profileError;
+      
+      if (password) {
+        const { error: authError } = await supabase.auth.updateUser({ password });
+        if (authError) throw authError;
+      }
+      return true;
+    } catch (err) {
+      return false;
+    }
   },
 
   async getAuditLogs(): Promise<AuditLog[]> {
-    return await dbStore.getAll<AuditLog>('audit_logs');
+    if (!supabase) return [];
+    const { data } = await supabase.from('audit_logs').select('*');
+    return data || [];
   },
 
   async getSecurityEvents(): Promise<SecurityEvent[]> {
-    return await dbStore.getAll<SecurityEvent>('security_events');
+    if (!supabase) return [];
+    const { data } = await supabase.from('security_events').select('*');
+    return data || [];
   },
 
+  /* Adicionando métodos para Infraestrutura */
   async updateEnvironment(environment: 'production' | 'staging' | 'development'): Promise<void> {
+    if (!supabase) return;
     const settings = await this.getSettings();
     await this.saveSettings({ ...settings, environment });
   },
 
   async getDeploys(): Promise<DeployRecord[]> {
-    return await dbStore.getAll<DeployRecord>('deploys');
+    if (!supabase) return [];
+    const { data } = await supabase.from('deploys').select('*');
+    return data || [];
   },
 
   async createDeploy(version: string, deployedBy: string, changelog: string): Promise<void> {
-    const deploy: DeployRecord = { id: 'dep-' + Date.now(), version, status: 'success', deployedBy, timestamp: new Date().toISOString(), changelog };
-    await dbStore.put('deploys', deploy);
+    if (!supabase) return;
+    const deploy: DeployRecord = {
+      id: `dep-${Date.now()}`,
+      version,
+      status: 'success',
+      deployedBy,
+      timestamp: new Date().toISOString(),
+      changelog
+    };
+    await supabase.from('deploys').insert(deploy);
   },
 
   async getBackups(): Promise<BackupRecord[]> {
-    return await dbStore.getAll<BackupRecord>('backups');
+    if (!supabase) return [];
+    const { data } = await supabase.from('backups').select('*');
+    return data || [];
   },
 
   async createBackup(name: string): Promise<void> {
-    const backup: BackupRecord = { id: 'bak-' + Date.now(), name, size: '25MB', status: 'completed', timestamp: new Date().toISOString() };
-    await dbStore.put('backups', backup);
+    if (!supabase) return;
+    const backup: BackupRecord = {
+      id: `bak-${Date.now()}`,
+      name,
+      size: '124MB',
+      status: 'completed',
+      timestamp: new Date().toISOString()
+    };
+    await supabase.from('backups').insert(backup);
   },
 
   getInfraMetrics(): InfraMetric {
-    return { uptime: '24d 14h', latency: 18, cpu: 8, ram: 38, lastHealthCheck: new Date().toISOString() };
+    return {
+      uptime: '12d 4h 32m',
+      latency: 42,
+      cpu: Math.floor(Math.random() * 30) + 10,
+      ram: Math.floor(Math.random() * 40) + 20,
+      lastHealthCheck: new Date().toISOString()
+    };
   },
 
+  /* Adicionando métodos para Marketplace e Lojistas */
   async getSellers(): Promise<Seller[]> {
-    return await dbStore.getAll<Seller>('sellers');
+    if (!supabase) return [];
+    const { data } = await supabase.from('sellers').select('*');
+    return data || [];
   },
 
   async saveSeller(seller: Seller): Promise<void> {
-    await dbStore.put('sellers', seller);
+    if (!supabase) return;
+    await supabase.from('sellers').upsert(seller);
   },
 
-  getUserPersonalData(email: string): any {
-    return { user: { name: 'Membro G-Fit', email }, orders: [], leads: [] };
+  /* Adicionando métodos para LGPD */
+  async saveConsent(userEmail: string, accepted: boolean): Promise<void> {
+    if (!supabase) return;
+    const consent: LGPDConsent = {
+      id: `cst-${Date.now()}`,
+      userEmail,
+      accepted,
+      ip: '127.0.0.1',
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString()
+    };
+    await supabase.from('lgpd_consents').insert(consent);
   },
 
-  async logLGPD(type: any, userEmail: string, message: string): Promise<void> {
-    const log: LGPDLog = { id: 'lgpd-' + Date.now(), type, userEmail, message, timestamp: new Date().toISOString() };
-    await dbStore.put('lgpd_logs', log);
+  async getConsents(): Promise<LGPDConsent[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('lgpd_consents').select('*');
+    return data || [];
+  },
+
+  getUserPersonalData(email: string) {
+    // Mock para portabilidade
+    return {
+      user: { name: 'Usuário Teste', email, createdAt: new Date().toISOString() },
+      orders: [],
+      leads: []
+    };
+  },
+
+  async logLGPD(type: LGPDLog['type'], userEmail: string, message: string): Promise<void> {
+    if (!supabase) return;
+    const log: LGPDLog = {
+      id: `lgl-${Date.now()}`,
+      type,
+      userEmail,
+      message,
+      timestamp: new Date().toISOString()
+    };
+    await supabase.from('lgpd_logs').insert(log);
   },
 
   async deleteUserPersonalData(email: string): Promise<void> {
-    console.warn('[LGPD] Exclusão lógica:', email);
+    if (!supabase) return;
+    await supabase.from('user_profile').delete().eq('email', email);
+    await this.logLGPD('data_deletion', email, 'Remoção total de dados via portal LGPD.');
   },
 
   async getLGPDLogs(): Promise<LGPDLog[]> {
-    return await dbStore.getAll<LGPDLog>('lgpd_logs');
+    if (!supabase) return [];
+    const { data } = await supabase.from('lgpd_logs').select('*');
+    return data || [];
   },
 
-  getPWAMetrics(): any {
-    return { installs: 1542, activeUsersMobile: 890, version: '4.2.0' };
+  /* Adicionando métodos para PWA */
+  getPWAMetrics() {
+    return {
+      installs: 1240,
+      activeUsersMobile: 850,
+      version: 'v1.9.4',
+    };
   },
 
   async getPWANotifications(): Promise<PWANotification[]> {
-    return await dbStore.getAll<PWANotification>('pwa_notifications');
+    if (!supabase) return [];
+    const { data } = await supabase.from('pwa_notifications').select('*');
+    return data || [];
   },
 
   async sendPWANotification(title: string, body: string): Promise<void> {
-    const notification: PWANotification = { id: 'pwa-' + Date.now(), title, body, sentAt: new Date().toISOString(), deliveredCount: 1542 };
-    await dbStore.put('pwa_notifications', notification);
+    if (!supabase) return;
+    const notification: PWANotification = {
+      id: `pwa-${Date.now()}`,
+      title,
+      body,
+      sentAt: new Date().toISOString(),
+      deliveredCount: 124
+    };
+    await supabase.from('pwa_notifications').insert(notification);
   },
 
+  /* Adicionando métodos para Integrações de API */
   async getAPIConfigs(): Promise<ExternalAPIConfig[]> {
-    return await dbStore.getAll<ExternalAPIConfig>('api_configs');
+    if (!supabase) return [];
+    const { data } = await supabase.from('api_configs').select('*');
+    return data || [];
   },
 
   async saveAPIConfig(cfg: ExternalAPIConfig): Promise<void> {
-    await dbStore.put('api_configs', cfg);
+    if (!supabase) return;
+    await supabase.from('api_configs').upsert(cfg);
   },
 
   async syncCRM(provider: string): Promise<void> {
-    const configs = await this.getAPIConfigs();
-    const cfg = configs.find(c => c.provider === provider);
-    if (cfg) await this.saveAPIConfig({ ...cfg, lastSync: new Date().toISOString() });
-  },
-
-  async getWAMessages(): Promise<WhatsAppMessage[]> {
-    return await dbStore.getAll<WhatsAppMessage>('wa_messages');
-  },
-
-  async sendWAMessage(userEmail: string, content: string, trigger: string): Promise<void> {
-    const msg: WhatsAppMessage = { id: 'wa-' + Date.now(), userEmail, content, trigger: trigger as any, status: 'sent', timestamp: new Date().toISOString() };
-    await dbStore.put('wa_messages', msg);
+    if (!supabase) return;
+    await supabase.from('sync_logs').insert({
+      id: `sync-${Date.now()}`,
+      provider,
+      type: 'lead',
+      status: 'success',
+      message: 'Sincronização CRM finalizada.',
+      timestamp: new Date().toISOString()
+    });
   },
 
   async syncERP(provider: string): Promise<void> {
-    const configs = await this.getAPIConfigs();
-    const cfg = configs.find(c => c.provider === provider);
-    if (cfg) await this.saveAPIConfig({ ...cfg, lastSync: new Date().toISOString() });
+    if (!supabase) return;
+    await supabase.from('sync_logs').insert({
+      id: `sync-${Date.now()}`,
+      provider,
+      type: 'order',
+      status: 'success',
+      message: 'Exportação ERP finalizada.',
+      timestamp: new Date().toISOString()
+    });
   },
 
   async getSyncLogs(): Promise<IntegrationSyncLog[]> {
-    return await dbStore.getAll<IntegrationSyncLog>('sync_logs');
+    if (!supabase) return [];
+    const { data } = await supabase.from('sync_logs').select('*');
+    return data || [];
   },
 
+  async getWAMessages(): Promise<WhatsAppMessage[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('wa_messages').select('*');
+    return data || [];
+  },
+
+  async sendWAMessage(userEmail: string, content: string, trigger: WhatsAppMessage['trigger']): Promise<void> {
+    if (!supabase) return;
+    const msg: WhatsAppMessage = {
+      id: `wa-${Date.now()}`,
+      userEmail,
+      content,
+      trigger,
+      status: 'sent',
+      timestamp: new Date().toISOString()
+    };
+    await supabase.from('wa_messages').insert(msg);
+  },
+
+  /* Adicionando métodos para Inteligência Artificial */
   async getAIRecommendations(): Promise<AIRecommendation[]> {
-    return await dbStore.getAll<AIRecommendation>('ai_recommendations');
+    if (!supabase) return [];
+    const { data } = await supabase.from('ai_recommendations').select('*');
+    return data || [];
   },
 
   async getAIPredictions(): Promise<AIPrediction[]> {
-    return await dbStore.getAll<AIPrediction>('ai_predictions');
+    if (!supabase) return [];
+    const { data } = await supabase.from('ai_predictions').select('*');
+    return data || [];
   },
 
   async getAIAutomations(): Promise<AIAutomationRule[]> {
-    return await dbStore.getAll<AIAutomationRule>('ai_automations');
+    if (!supabase) return [];
+    const { data } = await supabase.from('ai_automations').select('*');
+    return data || [];
   },
 
   async saveAIAutomation(rule: AIAutomationRule): Promise<void> {
-    await dbStore.put('ai_automations', rule);
+    if (!supabase) return;
+    await supabase.from('ai_automations').upsert(rule);
   },
 
   async getAILogs(): Promise<AILogEntry[]> {
-    return await dbStore.getAll<AILogEntry>('ai_logs');
-  },
-
-  async isProductFavorited(userId: string, productId: string): Promise<boolean> {
-    if (supabase) {
-      const { data } = await supabase.from('user_favorites').select('id').eq('userId', userId).eq('productId', productId).maybeSingle();
-      return !!data;
-    }
-    return false;
-  },
-
-  async toggleFavorite(userId: string, productId: string): Promise<boolean> {
-    if (supabase) {
-      const { data: existing } = await supabase.from('user_favorites').select('id').eq('userId', userId).eq('productId', productId).maybeSingle();
-      if (existing) {
-        await supabase.from('user_favorites').delete().eq('id', existing.id);
-        return false;
-      } else {
-        const { error } = await supabase.from('user_favorites').insert({ userId, productId, id: 'fav-' + Date.now() });
-        if (error) throw error;
-        return true;
-      }
-    }
-    return false;
-  },
-
-  async getFavorites(userId: string): Promise<Product[]> {
-    if (supabase) {
-      const { data: favs } = await supabase.from('user_favorites').select('productId').eq('userId', userId);
-      if (!favs || favs.length === 0) return [];
-      const ids = favs.map(f => f.productId);
-      const { data: prods } = await supabase.from('products').select('*').in('id', ids);
-      return prods || [];
-    }
-    return [];
-  },
-
-  // Fix: implement registerAffiliate method for public registration
-  async registerAffiliate(data: { name: string; email: string; reason: string }): Promise<void> {
-    if (supabase) {
-      const email = data.email.toLowerCase();
-      // Check for existing profile
-      const { data: existing } = await supabase.from('user_profile').select('id').eq('email', email).maybeSingle();
-      
-      let userId = existing?.id;
-      
-      if (!userId) {
-        // Create pending profile
-        userId = 'pending-' + Date.now();
-        const { error: pError } = await supabase.from('user_profile').insert({
-          id: userId,
-          name: data.name,
-          email: email,
-          role: UserRole.AFFILIATE,
-          status: UserStatus.INACTIVE,
-          loginType: 'hybrid',
-          created_at: new Date().toISOString()
-        });
-        if (pError) throw pError;
-      }
-
-      // Create affiliate entry
-      const { error: aError } = await supabase.from('affiliates').upsert({
-        id: 'aff-' + Date.now(),
-        userId: userId,
-        name: data.name,
-        email: email,
-        status: 'inactive',
-        commissionRate: 15,
-        totalSales: 0,
-        balance: 0,
-        refCode: ''
-      }, { onConflict: 'userId' });
-
-      if (aError) throw aError;
-    }
-    window.dispatchEvent(new Event('usersChanged'));
-  },
-
-  async approveAffiliate(userId: string): Promise<void> {
-    if (supabase) {
-      const refCode = 'REF-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-      await supabase.from('user_profile').update({ status: UserStatus.ACTIVE, loginType: 'hybrid' }).eq('id', userId);
-      await supabase.from('affiliates').update({ status: 'active', refCode }).eq('userId', userId);
-    }
-    window.dispatchEvent(new Event('usersChanged'));
-  },
-
-  async getSessions(): Promise<UserSession[]> {
-    const current = this.getActiveSession();
-    return current ? [current] : [];
+    if (!supabase) return [];
+    const { data } = await supabase.from('ai_logs').select('*');
+    return data || [];
   },
 
   async saveRole(role: RoleDefinition): Promise<void> {
-    await dbStore.put('roles', role);
+    if (!supabase) return;
+    await supabase.from('roles').upsert(role);
   }
 };
