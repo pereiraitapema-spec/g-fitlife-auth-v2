@@ -1,16 +1,17 @@
 
 {
   "name": "gfitlife-enterprise",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "G-FitLife Enterprise Health & Wellness Hub",
   "main": "server.js",
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
-    "dev": "nodemon server.js",
+    "dev": "vite",
     "build": "vite build",
-    "start": "node server.js"
+    "start": "node server.js",
+    "preview": "vite preview"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -24,8 +25,12 @@
     "morgan": "^1.10.0"
   },
   "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.1",
-    "nodemon": "^3.0.2",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
     "typescript": "^5.0.0",
     "vite": "^5.0.0"
   }

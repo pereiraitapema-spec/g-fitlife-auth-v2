@@ -10,22 +10,22 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 1. Seed Master Seguro (Utiliza SERVICE_ROLE)
+// 1. Seed Master com Verificação de Duplicidade (Proteção de Banco)
 async function seedMasterUser() {
   try {
-    const email = process.env.MASTER_EMAIL || 'admin@system.local';
+    const email = (process.env.MASTER_EMAIL || 'admin@system.local').toLowerCase();
     const password = process.env.MASTER_PASSWORD || 'admin123';
 
-    console.log('[CORE-SEED] Validando integridade da base Master...');
+    console.log('[CORE-SEED] Validando infraestrutura Master...');
     
-    // Lista usuários para evitar duplicidade
+    // Verifica se já existe no Auth
     const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     if (listError) throw listError;
 
-    let targetUser = usersData.users.find(u => u.email === email);
+    let targetUser = usersData.users.find(u => u.email.toLowerCase() === email);
 
     if (!targetUser) {
-      console.log('[CORE-SEED] Criando credenciais Master no Auth Service...');
+      console.log('[CORE-SEED] Criando conta Master no Auth Service...');
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
@@ -37,11 +37,11 @@ async function seedMasterUser() {
     }
 
     if (targetUser) {
-      // Upsert no perfil (tabela singular user_profile)
+      // Upsert no Perfil (Garante que a tabela singular user_profile esteja em sincronia)
       const { error: profileError } = await supabaseAdmin.from('user_profile').upsert({
         id: targetUser.id,
         name: 'G-FitLife Master',
-        email,
+        email: email,
         role: 'admin_master',
         status: 'active',
         loginType: 'hybrid',
@@ -49,16 +49,16 @@ async function seedMasterUser() {
       }, { onConflict: 'email' });
 
       if (profileError) throw profileError;
-      console.log('[CORE-SEED] Infraestrutura Master G-FitLife operacional.');
+      console.log('[CORE-SEED] G-FitLife Master pronto para operação.');
     }
   } catch (err) {
-    console.error('[CORE-SEED] Falha no Seed:', err.message);
+    console.error('[CORE-SEED] Erro na inicialização:', err.message);
   }
 }
 
 seedMasterUser();
 
-// Middlewares
+// Middlewares de Segurança e Log
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
@@ -67,25 +67,15 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// --- ROTAS DE API ---
+// --- ROTAS ADMINISTRATIVAS (Utilizam Service Role) ---
 
-// Health Check
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', uptime: process.uptime() });
-});
-
-// Admin: Criar Usuário (Usa Service Role)
 app.post('/api/admin/create-user', async (req, res) => {
   try {
     const { email, password, name, role } = req.body;
     
-    // Check duplicado
-    const { data: existing } = await supabaseAdmin.from('user_profile').select('id').eq('email', email.toLowerCase()).maybeSingle();
-    if (existing) return res.status(400).json({ error: 'E-mail já registrado.' });
-
-    // Criar no Auth
+    // 1. Criar credencial no Auth
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
+      email: email.toLowerCase(),
       password,
       email_confirm: true,
       user_metadata: { role }
@@ -93,11 +83,11 @@ app.post('/api/admin/create-user', async (req, res) => {
     
     if (authError) return res.status(400).json({ error: authError.message });
 
-    // Criar no Perfil
+    // 2. Criar perfil na tabela pública
     const { error: profileError } = await supabaseAdmin.from('user_profile').insert({
       id: authUser.user.id,
       name,
-      email,
+      email: email.toLowerCase(),
       role,
       status: 'active',
       loginType: 'hybrid',
@@ -105,25 +95,25 @@ app.post('/api/admin/create-user', async (req, res) => {
     });
 
     if (profileError) {
+        // Rollback no Auth se falhar o perfil
         await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
-        return res.status(400).json({ error: profileError.message });
+        return res.status(400).json({ error: 'Erro ao criar perfil no banco.' });
     }
 
     res.status(201).json({ status: 'ok', userId: authUser.user.id });
   } catch (err) {
-    res.status(500).json({ error: 'Falha interna na criação' });
+    res.status(500).json({ error: 'Falha interna no servidor admin.' });
   }
 });
 
-// Admin: Deletar Usuário
 app.delete('/api/admin/delete-user', async (req, res) => {
   try {
     const { userId } = req.body;
     const { data: user } = await supabaseAdmin.auth.admin.getUserById(userId);
-    const masterEmail = process.env.MASTER_EMAIL || 'admin@system.local';
+    const masterEmail = (process.env.MASTER_EMAIL || 'admin@system.local').toLowerCase();
     
-    if (user?.user?.email === masterEmail) {
-      return res.status(403).json({ error: 'Operação proibida para o Master.' });
+    if (user?.user?.email.toLowerCase() === masterEmail) {
+      return res.status(403).json({ error: 'Proibido excluir a conta Master do sistema.' });
     }
 
     await supabaseAdmin.auth.admin.deleteUser(userId);
@@ -131,19 +121,23 @@ app.delete('/api/admin/delete-user', async (req, res) => {
 
     res.status(200).json({ status: 'ok' });
   } catch (err) {
-    res.status(500).json({ error: 'Erro ao remover dados.' });
+    res.status(500).json({ error: 'Erro ao remover registros.' });
   }
 });
 
-// Servir arquivos estáticos do build do React/Vite
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
+
+// --- SERVIÇO DE ARQUIVOS ESTÁTICOS (BUILD VITE) ---
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
-// Fallback para SPA (index.html)
+// Fallback SPA - Serve index.html para qualquer rota não mapeada (Essencial para React Router)
 app.get('*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 SERVIDOR ONLINE NA PORTA ${PORT}`);
+  console.log(`🚀 G-FITLIFE BACKEND ONLINE NA PORTA ${PORT}`);
 });

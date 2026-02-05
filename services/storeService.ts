@@ -28,7 +28,7 @@ export const storeService = {
       return { success: true, session, profile: fallbackAdmin, isStaff: true };
     }
 
-    if (!supabase) return { success: false, error: 'Banco de dados inacessível' };
+    if (!supabase) return { success: false, error: 'Serviço de dados offline.' };
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -36,13 +36,14 @@ export const storeService = {
         password: pass
       });
 
-      if (error) return { success: false, error: 'Credenciais inválidas' };
+      if (error) return { success: false, error: 'E-mail ou senha incorretos.' };
+      
       if (data.user) {
         const profile = await this.getProfileAfterLogin(data.user.id);
         if (profile) {
           if (profile.status !== UserStatus.ACTIVE) {
             await supabase.auth.signOut();
-            return { success: false, error: 'Conta inativa' };
+            return { success: false, error: 'Esta conta está temporariamente suspensa.' };
           }
           const session = this.createSession(profile);
           const isStaff = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING].includes(profile.role);
@@ -50,13 +51,13 @@ export const storeService = {
         }
       }
     } catch (err) {
-      return { success: false, error: 'Erro de comunicação' };
+      return { success: false, error: 'Falha na comunicação com o servidor.' };
     }
-    return { success: false, error: 'Erro ao obter perfil' };
+    return { success: false, error: 'Perfil de usuário não configurado.' };
   },
 
   async loginWithGoogle() {
-    if (!supabase) return { success: false, error: 'Supabase Offline' };
+    if (!supabase) return { success: false, error: 'Auth Social desativado.' };
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -68,30 +69,30 @@ export const storeService = {
       if (error) throw error;
       return { success: true };
     } catch (err) {
-      return { success: false, error: 'Falha no acesso Google' };
+      return { success: false, error: 'Erro no provedor Google.' };
     }
   },
 
   async getProfileAfterLogin(userId: string) {
     if (!supabase) return null;
     
-    // Tabela singular user_profile
+    // Tabela singular user_profile (Regra de Ouro)
     const { data: profileByUid } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
     if (profileByUid) return profileByUid;
 
-    // Se não encontrou por ID, tenta por e-mail (caso seja migração)
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (authUser?.email) {
+      // Fusão Híbrida: Busca por e-mail caso o ID tenha mudado em novo login social
       const { data: profileByEmail } = await supabase.from('user_profile').select('*').eq('email', authUser.email.toLowerCase()).maybeSingle();
       if (profileByEmail) {
         await supabase.from('user_profile').update({ id: authUser.id }).eq('email', authUser.email.toLowerCase());
         return { ...profileByEmail, id: authUser.id };
       } else {
-        // Criar perfil novo
+        // Auto-provisionamento de perfil para novos usuários
         const newProfile = {
           id: authUser.id,
           email: authUser.email.toLowerCase(),
-          name: authUser.user_metadata?.full_name || 'Novo Membro',
+          name: authUser.user_metadata?.full_name || 'Novo Membro G-Fit',
           role: UserRole.CUSTOMER,
           status: UserStatus.ACTIVE,
           loginType: 'hybrid',
@@ -105,13 +106,13 @@ export const storeService = {
   },
 
   async uploadFile(file: File): Promise<string> {
-    if (!supabase) throw new Error('Supabase Indisponível');
+    if (!supabase) throw new Error('Supabase Storage inacessível.');
     
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `public/${fileName}`;
 
-    // Bucket uploads é o padrão corporativo
+    // Bucket: uploads (Obrigatório)
     const { error: uploadError } = await supabase.storage
       .from('uploads')
       .upload(filePath, file);
@@ -126,7 +127,8 @@ export const storeService = {
   },
 
   async saveUser(user: AppUser): Promise<void> {
-    if (!supabase) throw new Error('Offline');
+    if (!supabase) throw new Error('Banco offline');
+    // Upsert em user_profile (singular)
     const { error } = await supabase.from('user_profile').upsert(user, { onConflict: 'email' });
     if (error) throw error;
     window.dispatchEvent(new Event('usersChanged'));
@@ -138,9 +140,8 @@ export const storeService = {
     return data || [];
   },
 
-  /* Adicionando updateUserStatus para corrigir erro no Users.tsx e CoreUsers.tsx */
   async updateUserStatus(id: string, status: UserStatus): Promise<void> {
-    if (!supabase) throw new Error('Offline');
+    if (!supabase) throw new Error('Falha na sincronização');
     const { error } = await supabase.from('user_profile').update({ status }).eq('id', id);
     if (error) throw error;
     window.dispatchEvent(new Event('usersChanged'));
@@ -153,13 +154,12 @@ export const storeService = {
   },
 
   async saveProduct(p: Product): Promise<void> {
-    if (!supabase) throw new Error('Offline');
+    if (!supabase) throw new Error('Modo leitura apenas.');
     const { error } = await supabase.from('products').upsert(p);
     if (error) throw error;
     window.dispatchEvent(new Event('productsChanged'));
   },
 
-  /* Adicionando getOrders para corrigir erro no OrdersPage.tsx, CustomerPortal.tsx e MarketplaceFinance.tsx */
   async getOrders(): Promise<Order[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });
@@ -167,15 +167,14 @@ export const storeService = {
   },
 
   async saveOrder(o: Order): Promise<void> {
-    if (!supabase) throw new Error('Offline');
+    if (!supabase) throw new Error('Sessão expirada.');
     const { error } = await supabase.from('orders').insert(o);
     if (error) throw error;
     window.dispatchEvent(new Event('ordersChanged'));
   },
 
-  /* Adicionando updateOrderStatus para corrigir erro no OrdersPage.tsx */
   async updateOrderStatus(id: string, status: OrderStatus): Promise<void> {
-    if (!supabase) throw new Error('Offline');
+    if (!supabase) return;
     const { error } = await supabase.from('orders').update({ status }).eq('id', id);
     if (error) throw error;
     window.dispatchEvent(new Event('ordersChanged'));
@@ -186,7 +185,6 @@ export const storeService = {
       const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').maybeSingle();
       if (data) return data as SystemSettings;
     }
-    // Fallback default
     return {
       nomeLoja: 'G-FitLife',
       logoUrl: '',
@@ -241,7 +239,7 @@ export const storeService = {
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Falha ao criar admin');
+      throw new Error(error.error || 'Falha ao provisionar acesso admin.');
     }
     window.dispatchEvent(new Event('usersChanged'));
   },
@@ -254,49 +252,15 @@ export const storeService = {
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Falha ao excluir');
+      throw new Error(error.error || 'Acesso negado.');
     }
     window.dispatchEvent(new Event('usersChanged'));
     return true;
   },
 
-  async registerAffiliate(data: { name: string; email: string; reason: string }): Promise<void> {
-    if (!supabase) return;
-    const email = data.email.toLowerCase();
-    const { data: existing } = await supabase.from('user_profile').select('id').eq('email', email).maybeSingle();
-    
-    let userId = existing?.id;
-    if (!userId) {
-      userId = 'pending-' + Date.now();
-      await supabase.from('user_profile').insert({
-        id: userId, name: data.name, email: email, role: UserRole.AFFILIATE, status: UserStatus.INACTIVE, loginType: 'hybrid'
-      });
-    }
-
-    await supabase.from('affiliates').upsert({
-      userId: userId, name: data.name, email: email, status: 'inactive', commissionRate: 15, totalSales: 0, balance: 0, refCode: ''
-    }, { onConflict: 'userId' });
-    
-    window.dispatchEvent(new Event('usersChanged'));
-  },
-
-  async approveAffiliate(userId: string): Promise<void> {
-    if (!supabase) return;
-    const refCode = 'REF-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-    await supabase.from('user_profile').update({ status: UserStatus.ACTIVE }).eq('id', userId);
-    await supabase.from('affiliates').update({ status: 'active', refCode }).eq('userId', userId);
-    window.dispatchEvent(new Event('usersChanged'));
-  },
-
   async getAffiliates(): Promise<Affiliate[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('affiliates').select('*');
-    return data || [];
-  },
-
-  async getCommissions(): Promise<Commission[]> {
-    if (!supabase) return [];
-    const { data } = await supabase.from('commissions').select('*, affiliate:affiliates(name)');
     return data || [];
   },
 
@@ -319,18 +283,10 @@ export const storeService = {
       { id: UserRole.CUSTOMER, label: 'Usuário Final', permissions: [] },
       { id: UserRole.FINANCE, label: 'Financeiro', permissions: [] },
       { id: UserRole.MARKETING, label: 'Marketing', permissions: [] },
-      { id: UserRole.AFFILIATE, label: 'Afiliado', permissions: [] },
-      { id: UserRole.SELLER, label: 'Vendedor Mkp', permissions: [] }
+      { id: UserRole.AFFILIATE, label: 'Afiliado', permissions: [] }
     ];
   },
 
-  async getHelpTopic(id: string): Promise<HelpTopic | null> {
-    if (!supabase) return null;
-    const { data } = await supabase.from('help_topics').select('*').eq('id', id).maybeSingle();
-    return data;
-  },
-
-  /* Adicionando métodos para Favoritos */
   async isProductFavorited(userId: string, productId: string): Promise<boolean> {
     if (!supabase) return false;
     const { data } = await supabase.from('user_favorites').select('id').eq('userId', userId).eq('productId', productId).maybeSingle();
@@ -358,7 +314,20 @@ export const storeService = {
     return prods || [];
   },
 
-  /* Adicionando métodos para Departamentos e Categorias */
+  async saveConsent(userEmail: string, accepted: boolean): Promise<void> {
+    if (!supabase) return;
+    await supabase.from('lgpd_consents').insert({
+      id: `cst-${Date.now()}`,
+      userEmail,
+      accepted,
+      ip: '0.0.0.0',
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString()
+    });
+  },
+
+  // FIX: Implemented missing methods below
+
   async getDepartments(): Promise<Department[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('departments').select('*');
@@ -381,7 +350,6 @@ export const storeService = {
     await supabase.from('categories').upsert(cat);
   },
 
-  /* Adicionando métodos para Cupons */
   async getCoupons(): Promise<Coupon[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('coupons').select('*');
@@ -393,18 +361,28 @@ export const storeService = {
     await supabase.from('coupons').upsert(coupon);
   },
 
-  /* Adicionando métodos para Leads e Remarketing */
   async captureLead(email: string, product: Product): Promise<void> {
     if (!supabase) return;
-    const lead: Lead = {
-      id: `lead-${Date.now()}`,
+    await supabase.from('leads').insert({
+      id: 'lead-' + Date.now(),
       email: email.toLowerCase(),
       productId: product.id,
       productName: product.name,
       capturedAt: new Date().toISOString(),
       converted: false
-    };
-    await supabase.from('leads').insert(lead);
+    });
+  },
+
+  async approveAffiliate(userId: string): Promise<void> {
+    if (!supabase) return;
+    await supabase.from('affiliates').update({ status: 'active' }).eq('userId', userId);
+    await supabase.from('user_profile').update({ role: UserRole.AFFILIATE }).eq('id', userId);
+  },
+
+  async getCommissions(): Promise<Commission[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('commissions').select('*');
+    return data || [];
   },
 
   async getLeads(): Promise<Lead[]> {
@@ -427,29 +405,26 @@ export const storeService = {
 
   async triggerRemarketing(lead: Lead): Promise<void> {
     if (!supabase) return;
-    const log: RemarketingLog = {
-      id: `log-${Date.now()}`,
+    await supabase.from('remarketing_logs').insert({
+      id: 'remkt-' + Date.now(),
       leadEmail: lead.email,
       productName: lead.productName,
       sentAt: new Date().toISOString(),
       status: 'sent'
-    };
-    await supabase.from('remarketing_logs').insert(log);
+    });
   },
 
-  /* Adicionando métodos para Chat IA */
   async getChatSessions(): Promise<AIChatSession[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('chat_sessions').select('*');
     return data || [];
   },
 
-  async updateChatStatus(id: string, status: 'active' | 'escalated' | 'closed'): Promise<void> {
+  async updateChatStatus(id: string, status: string): Promise<void> {
     if (!supabase) return;
     await supabase.from('chat_sessions').update({ status }).eq('id', id);
   },
 
-  /* Adicionando métodos para Performance e Monitoramento */
   async getPerformanceMetrics(): Promise<PerformanceMetric[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('performance_metrics').select('*');
@@ -462,16 +437,15 @@ export const storeService = {
     return data || [];
   },
 
-  /* Adicionando métodos para Financeiro e Gateways */
   async getGateways(): Promise<PaymentGateway[]> {
     if (!supabase) return [];
-    const { data } = await supabase.from('gateways').select('*');
+    const { data } = await supabase.from('payment_gateways').select('*');
     return data || [];
   },
 
-  async saveGateway(gateway: PaymentGateway): Promise<void> {
+  async saveGateway(gw: PaymentGateway): Promise<void> {
     if (!supabase) return;
-    await supabase.from('gateways').upsert(gateway);
+    await supabase.from('payment_gateways').upsert(gw);
   },
 
   async getTransactions(): Promise<Transaction[]> {
@@ -480,7 +454,6 @@ export const storeService = {
     return data || [];
   },
 
-  /* Adicionando métodos para Logística */
   async getCarriers(): Promise<Carrier[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('carriers').select('*');
@@ -493,27 +466,19 @@ export const storeService = {
     return data || [];
   },
 
-  /* Adicionando métodos para Segurança e Auditoria */
   async getSessions(): Promise<UserSession[]> {
-    // Para simplificar, retornamos a sessão atual
-    const s = this.getActiveSession();
-    return s ? [s] : [];
+    const active = this.getActiveSession();
+    return active ? [active] : [];
   },
 
   async updateMyCredentials(userId: string, email: string, password?: string): Promise<boolean> {
     if (!supabase) return false;
-    try {
-      const { error: profileError } = await supabase.from('user_profile').update({ email }).eq('id', userId);
-      if (profileError) throw profileError;
-      
-      if (password) {
-        const { error: authError } = await supabase.auth.updateUser({ password });
-        if (authError) throw authError;
-      }
-      return true;
-    } catch (err) {
-      return false;
-    }
+    const data: any = { email };
+    if (password) data.password = password;
+    const { error } = await supabase.auth.updateUser(data);
+    if (error) return false;
+    const { error: profileError } = await supabase.from('user_profile').update({ email }).eq('id', userId);
+    return !profileError;
   },
 
   async getAuditLogs(): Promise<AuditLog[]> {
@@ -528,61 +493,57 @@ export const storeService = {
     return data || [];
   },
 
-  /* Adicionando métodos para Infraestrutura */
-  async updateEnvironment(environment: 'production' | 'staging' | 'development'): Promise<void> {
+  async updateEnvironment(environment: string): Promise<void> {
     if (!supabase) return;
     const settings = await this.getSettings();
-    await this.saveSettings({ ...settings, environment });
+    await this.saveSettings({ ...settings, environment: environment as any });
   },
 
   async getDeploys(): Promise<DeployRecord[]> {
     if (!supabase) return [];
-    const { data } = await supabase.from('deploys').select('*');
+    const { data } = await supabase.from('deploy_records').select('*');
     return data || [];
   },
 
   async createDeploy(version: string, deployedBy: string, changelog: string): Promise<void> {
     if (!supabase) return;
-    const deploy: DeployRecord = {
-      id: `dep-${Date.now()}`,
+    await supabase.from('deploy_records').insert({
+      id: 'dep-' + Date.now(),
       version,
-      status: 'success',
       deployedBy,
-      timestamp: new Date().toISOString(),
-      changelog
-    };
-    await supabase.from('deploys').insert(deploy);
+      changelog,
+      status: 'success',
+      timestamp: new Date().toISOString()
+    });
   },
 
   async getBackups(): Promise<BackupRecord[]> {
     if (!supabase) return [];
-    const { data } = await supabase.from('backups').select('*');
+    const { data } = await supabase.from('backup_records').select('*');
     return data || [];
   },
 
   async createBackup(name: string): Promise<void> {
     if (!supabase) return;
-    const backup: BackupRecord = {
-      id: `bak-${Date.now()}`,
+    await supabase.from('backup_records').insert({
+      id: 'bak-' + Date.now(),
       name,
-      size: '124MB',
+      size: '42MB',
       status: 'completed',
       timestamp: new Date().toISOString()
-    };
-    await supabase.from('backups').insert(backup);
+    });
   },
 
   getInfraMetrics(): InfraMetric {
     return {
-      uptime: '12d 4h 32m',
-      latency: 42,
-      cpu: Math.floor(Math.random() * 30) + 10,
+      uptime: '14d 6h 22m',
+      latency: Math.floor(Math.random() * 50) + 10,
+      cpu: Math.floor(Math.random() * 30) + 5,
       ram: Math.floor(Math.random() * 40) + 20,
       lastHealthCheck: new Date().toISOString()
     };
   },
 
-  /* Adicionando métodos para Marketplace e Lojistas */
   async getSellers(): Promise<Seller[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('sellers').select('*');
@@ -594,51 +555,40 @@ export const storeService = {
     await supabase.from('sellers').upsert(seller);
   },
 
-  /* Adicionando métodos para LGPD */
-  async saveConsent(userEmail: string, accepted: boolean): Promise<void> {
-    if (!supabase) return;
-    const consent: LGPDConsent = {
-      id: `cst-${Date.now()}`,
-      userEmail,
-      accepted,
-      ip: '127.0.0.1',
-      userAgent: navigator.userAgent,
-      timestamp: new Date().toISOString()
-    };
-    await supabase.from('lgpd_consents').insert(consent);
-  },
-
   async getConsents(): Promise<LGPDConsent[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('lgpd_consents').select('*');
     return data || [];
   },
 
-  getUserPersonalData(email: string) {
-    // Mock para portabilidade
-    return {
-      user: { name: 'Usuário Teste', email, createdAt: new Date().toISOString() },
-      orders: [],
-      leads: []
-    };
+  async getUserPersonalData(email: string): Promise<any> {
+    if (!supabase) return null;
+    const { data: user } = await supabase.from('user_profile').select('*').eq('email', email).maybeSingle();
+    const { data: orders } = await supabase.from('orders').select('*').eq('customerEmail', email);
+    const { data: leads } = await supabase.from('leads').select('*').eq('email', email);
+    return { user, orders: orders || [], leads: leads || [] };
   },
 
-  async logLGPD(type: LGPDLog['type'], userEmail: string, message: string): Promise<void> {
+  async logLGPD(type: string, userEmail: string, message: string): Promise<void> {
     if (!supabase) return;
-    const log: LGPDLog = {
-      id: `lgl-${Date.now()}`,
+    await supabase.from('lgpd_logs').insert({
+      id: 'lgpd-' + Date.now(),
       type,
       userEmail,
       message,
       timestamp: new Date().toISOString()
-    };
-    await supabase.from('lgpd_logs').insert(log);
+    });
   },
 
   async deleteUserPersonalData(email: string): Promise<void> {
     if (!supabase) return;
-    await supabase.from('user_profile').delete().eq('email', email);
-    await this.logLGPD('data_deletion', email, 'Remoção total de dados via portal LGPD.');
+    const { data: user } = await supabase.from('user_profile').select('id').eq('email', email).maybeSingle();
+    if (user) {
+      await supabase.from('user_profile').delete().eq('id', user.id);
+      await supabase.from('orders').delete().eq('customerEmail', email);
+      await supabase.from('leads').delete().eq('email', email);
+      await supabase.auth.signOut();
+    }
   },
 
   async getLGPDLogs(): Promise<LGPDLog[]> {
@@ -647,12 +597,11 @@ export const storeService = {
     return data || [];
   },
 
-  /* Adicionando métodos para PWA */
   getPWAMetrics() {
     return {
-      installs: 1240,
-      activeUsersMobile: 850,
-      version: 'v1.9.4',
+      installs: 124,
+      activeUsersMobile: 86,
+      version: '1.9.2-stable'
     };
   },
 
@@ -664,78 +613,60 @@ export const storeService = {
 
   async sendPWANotification(title: string, body: string): Promise<void> {
     if (!supabase) return;
-    const notification: PWANotification = {
-      id: `pwa-${Date.now()}`,
+    await supabase.from('pwa_notifications').insert({
+      id: 'push-' + Date.now(),
       title,
       body,
       sentAt: new Date().toISOString(),
       deliveredCount: 124
-    };
-    await supabase.from('pwa_notifications').insert(notification);
+    });
   },
 
-  /* Adicionando métodos para Integrações de API */
   async getAPIConfigs(): Promise<ExternalAPIConfig[]> {
     if (!supabase) return [];
-    const { data } = await supabase.from('api_configs').select('*');
+    const { data } = await supabase.from('external_api_configs').select('*');
     return data || [];
-  },
-
-  async saveAPIConfig(cfg: ExternalAPIConfig): Promise<void> {
-    if (!supabase) return;
-    await supabase.from('api_configs').upsert(cfg);
   },
 
   async syncCRM(provider: string): Promise<void> {
     if (!supabase) return;
-    await supabase.from('sync_logs').insert({
-      id: `sync-${Date.now()}`,
-      provider,
-      type: 'lead',
-      status: 'success',
-      message: 'Sincronização CRM finalizada.',
+    await supabase.from('external_api_configs').update({ lastSync: new Date().toISOString() }).eq('provider', provider);
+  },
+
+  async getWAMessages(): Promise<WhatsAppMessage[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('whatsapp_messages').select('*');
+    return data || [];
+  },
+
+  async sendWAMessage(userEmail: string, content: string, trigger: 'lead' | 'purchase' | 'remarketing' | 'manual'): Promise<void> {
+    if (!supabase) return;
+    await supabase.from('whatsapp_messages').insert({
+      id: 'wa-' + Date.now(),
+      userEmail,
+      content,
+      trigger,
+      status: 'sent',
       timestamp: new Date().toISOString()
     });
   },
 
   async syncERP(provider: string): Promise<void> {
     if (!supabase) return;
-    await supabase.from('sync_logs').insert({
-      id: `sync-${Date.now()}`,
-      provider,
-      type: 'order',
-      status: 'success',
-      message: 'Exportação ERP finalizada.',
-      timestamp: new Date().toISOString()
-    });
+    await supabase.from('external_api_configs').update({ lastSync: new Date().toISOString() }).eq('provider', provider);
   },
 
   async getSyncLogs(): Promise<IntegrationSyncLog[]> {
     if (!supabase) return [];
-    const { data } = await supabase.from('sync_logs').select('*');
+    const { data } = await supabase.from('integration_sync_logs').select('*');
     return data || [];
   },
 
-  async getWAMessages(): Promise<WhatsAppMessage[]> {
-    if (!supabase) return [];
-    const { data } = await supabase.from('wa_messages').select('*');
-    return data || [];
-  },
-
-  async sendWAMessage(userEmail: string, content: string, trigger: WhatsAppMessage['trigger']): Promise<void> {
+  async saveAPIConfig(cfg: ExternalAPIConfig): Promise<void> {
     if (!supabase) return;
-    const msg: WhatsAppMessage = {
-      id: `wa-${Date.now()}`,
-      userEmail,
-      content,
-      trigger,
-      status: 'sent',
-      timestamp: new Date().toISOString()
-    };
-    await supabase.from('wa_messages').insert(msg);
+    await supabase.from('external_api_configs').upsert(cfg);
   },
 
-  /* Adicionando métodos para Inteligência Artificial */
   async getAIRecommendations(): Promise<AIRecommendation[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('ai_recommendations').select('*');
@@ -750,23 +681,45 @@ export const storeService = {
 
   async getAIAutomations(): Promise<AIAutomationRule[]> {
     if (!supabase) return [];
-    const { data } = await supabase.from('ai_automations').select('*');
+    const { data } = await supabase.from('ai_automation_rules').select('*');
     return data || [];
   },
 
   async saveAIAutomation(rule: AIAutomationRule): Promise<void> {
     if (!supabase) return;
-    await supabase.from('ai_automations').upsert(rule);
+    await supabase.from('ai_automation_rules').upsert(rule);
   },
 
   async getAILogs(): Promise<AILogEntry[]> {
     if (!supabase) return [];
-    const { data } = await supabase.from('ai_logs').select('*');
+    const { data } = await supabase.from('ai_log_entries').select('*');
     return data || [];
   },
 
   async saveRole(role: RoleDefinition): Promise<void> {
     if (!supabase) return;
     await supabase.from('roles').upsert(role);
+  },
+
+  async getHelpTopic(id: string): Promise<HelpTopic | null> {
+    if (!supabase) return null;
+    const { data } = await supabase.from('help_topics').select('*').eq('id', id).maybeSingle();
+    return data;
+  },
+
+  async registerAffiliate(data: any): Promise<void> {
+    if (!supabase) return;
+    const newAffiliate = {
+      id: 'aff-' + Date.now(),
+      userId: data.email, // Using email as temp ID
+      name: data.name,
+      email: data.email,
+      status: 'inactive',
+      commissionRate: 15,
+      totalSales: 0,
+      balance: 0,
+      refCode: Math.random().toString(36).substring(7).toUpperCase()
+    };
+    await supabase.from('affiliates').insert(newAffiliate);
   }
 };
