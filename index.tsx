@@ -1,8 +1,8 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import './index.css'; // Importação obrigatória para bundle CSS via Vite/PostCSS
 import App from './App';
-import './index.css'; // Importação obrigatória para bundle CSS via JS
 
 const container = document.getElementById('root');
 

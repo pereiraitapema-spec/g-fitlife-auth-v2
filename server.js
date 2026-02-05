@@ -1,4 +1,3 @@
-
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
@@ -54,7 +53,7 @@ seedMasterUser();
 
 // Middlewares de Segurança
 app.use(helmet({
-  contentSecurityPolicy: false, // Desabilitado para compatibilidade com ESM.sh
+  contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
 }));
 app.use(cors());
@@ -65,9 +64,11 @@ app.use(morgan('dev'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // --- SERVIÇO DE ARQUIVOS ESTÁTICOS (Prioridade Total) ---
-// Garante que /assets/*.css seja servido corretamente antes do fallback
 const distPath = path.resolve(__dirname, 'dist');
+
+// Servir arquivos físicos se existirem
 app.use(express.static(distPath, {
+  index: false,
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.css')) {
       res.setHeader('Content-Type', 'text/css');
@@ -75,13 +76,21 @@ app.use(express.static(distPath, {
   }
 }));
 
-// Fallback SPA (Somente para rotas que não são arquivos reais)
+// Fallback SPA (Somente para rotas de navegação)
 app.get('*', (req, res) => {
-  // Se for uma requisição de arquivo (tem ponto no final) e não foi encontrado pelo static, retorna 404
-  if (req.path.includes('.') && !req.path.endsWith('.html')) {
-    return res.status(404).send('Not Found');
+  // Se a requisição tem extensão (ex: .css, .js, .png) e chegou aqui, o arquivo NÃO existe
+  // Retornamos 404 para evitar que o navegador receba HTML no lugar de um asset
+  const ext = path.extname(req.path);
+  if (ext && ext !== '.html') {
+    return res.status(404).send('Resource not found');
   }
-  res.sendFile(path.join(distPath, 'index.html'));
+
+  // Caso contrário, serve o index.html para o React Router lidar com a rota
+  res.sendFile(path.join(distPath, 'index.html'), (err) => {
+    if (err) {
+      res.status(500).send('Application build missing. Please run npm run build.');
+    }
+  });
 });
 
 app.listen(PORT, () => {
