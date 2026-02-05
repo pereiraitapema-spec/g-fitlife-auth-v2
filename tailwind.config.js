@@ -1,3 +1,5 @@
+import tailwindAnimate from 'tailwindcss-animate';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -33,7 +35,7 @@ export default {
     },
   },
   plugins: [
-    require('tailwindcss-animate'),
+    tailwindAnimate,
     function({ addComponents, addUtilities, addBase }) {
       addBase({
         'body': {
