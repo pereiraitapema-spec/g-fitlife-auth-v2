@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { storeService } from '../services/storeService';
+import { storageService } from '../services/storageservice';
 
 interface FileUploadProps {
   currentUrl: string;
@@ -29,13 +28,13 @@ const FileUpload: React.FC<FileUploadProps> = ({ currentUrl, onUploadComplete, l
 
     setIsUploading(true);
     try {
-      console.log(`[UPLOAD] Iniciando envio de ${file.name}...`);
-      const remoteUrl = await storeService.uploadFile(file);
+      console.log(`[UPLOAD] Iniciando envio de ${file.name} para o bucket 'uploads'...`);
+      const remoteUrl = await storageService.upload(file);
       console.log(`[UPLOAD] Sucesso: ${remoteUrl}`);
       onUploadComplete(remoteUrl);
     } catch (error) {
       console.error("[UPLOAD-ERROR]", error);
-      alert('Falha no upload para o Supabase Storage. Verifique se o bucket "uploads" existe e é público.');
+      alert('Falha no upload para o Supabase Storage. Certifique-se de que o bucket "uploads" existe, está configurado como público e as políticas RLS permitem a operação.');
       setPreview(currentUrl); // Reverter preview em caso de erro
     } finally {
       setIsUploading(false);
