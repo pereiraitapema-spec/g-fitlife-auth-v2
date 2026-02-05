@@ -9,7 +9,7 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 1. Seed Master com Verificação de Duplicidade
+// Seed Master Account
 async function seedMasterUser() {
   try {
     const email = (process.env.MASTER_EMAIL || 'admin@system.local').toLowerCase();
@@ -21,7 +21,7 @@ async function seedMasterUser() {
     let targetUser = usersData.users.find(u => u.email.toLowerCase() === email);
 
     if (!targetUser) {
-      console.log('[CORE-SEED] Criando Master account...');
+      console.log('[GFIT-BACKEND] Criando conta Master inicial...');
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
@@ -42,16 +42,15 @@ async function seedMasterUser() {
         loginType: 'hybrid',
         created_at: new Date().toISOString()
       }, { onConflict: 'email' });
-      console.log('[CORE-SEED] Sistema Master operando.');
+      console.log('[GFIT-BACKEND] Sistema Master OK.');
     }
   } catch (err) {
-    console.error('[CORE-SEED] Falha no Seed:', err.message);
+    console.error('[GFIT-BACKEND] Erro no Seed:', err.message);
   }
 }
 
 seedMasterUser();
 
-// Middlewares de Segurança
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
@@ -60,37 +59,19 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// --- API ROUTES ---
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+// API Routes
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
-// --- SERVIÇO DE ARQUIVOS ESTÁTICOS (Prioridade Total) ---
+// Static Files & SPA Fallback
 const distPath = path.resolve(__dirname, 'dist');
+app.use(express.static(distPath));
 
-// Servir arquivos físicos se existirem
-app.use(express.static(distPath, {
-  index: false,
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    }
-  }
-}));
-
-// Fallback SPA (Somente para rotas de navegação)
 app.get('*', (req, res) => {
-  // Se a requisição tem extensão (ex: .css, .js, .png) e chegou aqui, o arquivo NÃO existe
-  // Retornamos 404 para evitar que o navegador receba HTML no lugar de um asset
-  const ext = path.extname(req.path);
-  if (ext && ext !== '.html') {
-    return res.status(404).send('Resource not found');
+  // Ignora requests por assets que não existem (extensões)
+  if (path.extname(req.path)) {
+    return res.status(404).send('Not found');
   }
-
-  // Caso contrário, serve o index.html para o React Router lidar com a rota
-  res.sendFile(path.join(distPath, 'index.html'), (err) => {
-    if (err) {
-      res.status(500).send('Application build missing. Please run npm run build.');
-    }
-  });
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 app.listen(PORT, () => {

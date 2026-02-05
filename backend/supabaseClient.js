@@ -1,24 +1,24 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 /**
  * CLIENTE SUPABASE PARA FRONTEND
- * Proteção contra variáveis indefinidas que causam tela branca.
+ * Configuração resiliente para evitar tela branca.
  */
 
-const supabaseUrl = (typeof process !== 'undefined' && process.env?.SUPABASE_URL) || '';
-const supabaseAnonKey = (typeof process !== 'undefined' && process.env?.SUPABASE_ANON_KEY) || '';
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
 
 let supabaseInstance = null;
 
-if (supabaseUrl && supabaseAnonKey) {
+if (supabaseUrl && supabaseAnonKey && supabaseUrl !== 'https://seu-projeto-id.supabase.co') {
   try {
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+    console.log("[GFIT-SYSTEM] Supabase Cloud Conectado.");
   } catch (err) {
-    console.error("[SUPABASE-INIT-ERROR]", err);
+    console.error("[GFIT-SYSTEM] Erro ao instanciar Supabase:", err);
   }
 } else {
-  console.warn("[SUPABASE] Variáveis de ambiente ausentes. O sistema funcionará em modo offline.");
+  console.warn("[GFIT-SYSTEM] Ambiente operando em modo OFFLINE. Configure SUPABASE_URL e SUPABASE_ANON_KEY.");
 }
 
 export const supabase = supabaseInstance;

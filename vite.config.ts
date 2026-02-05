@@ -7,18 +7,18 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // Injeta variáveis com fallback para string vazia para não quebrar a lógica de strings
       'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL || ''),
       'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY || ''),
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
       'process.env.NODE_ENV': JSON.stringify(mode),
     },
     build: {
       outDir: 'dist',
       emptyOutDir: true,
+      sourcemap: mode === 'development',
     },
     server: {
       port: 5173,
-      strictPort: true,
       proxy: {
         '/api': {
           target: 'http://localhost:3000',
