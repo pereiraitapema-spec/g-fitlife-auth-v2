@@ -226,7 +226,8 @@ const App: React.FC = () => {
   };
 
   /**
-   * CORREÇÃO: Função de recuperação de senha com log de auditoria e chamada direta ao Supabase
+   * FLUXO PROFISSIONAL DE RECUPERAÇÃO DE SENHA (MAGIC LINK)
+   * Redireciona o usuário autenticado diretamente para a redefinição.
    */
   const handleRecover = async (e?: React.FormEvent | React.MouseEvent) => {
     console.log("RECOVER_CLICK_OK");
@@ -243,17 +244,21 @@ const App: React.FC = () => {
     try {
       if (!supabase) throw new Error("Serviço Auth indisponível.");
       
-      const { error } = await supabase.auth.resetPasswordForEmail(loginEmail.trim().toLowerCase(), {
-        redirectTo: "https://g-fitlife-auth-v2-production.up.railway.app/reset-password"
+      // FLUXO VIA OTP/MAGIC LINK PARA RESET SEGURO
+      const { error } = await supabase.auth.signInWithOtp({
+        email: loginEmail.trim().toLowerCase(),
+        options: {
+          emailRedirectTo: 'https://g-fitlife-auth-v2-production.up.railway.app/reset-password'
+        }
       });
       
       if (error) throw error;
 
-      triggerFeedback('Email de recuperação enviado');
+      triggerFeedback('Link de recuperação enviado. Verifique seu email.', 'success');
       setIsRecoveryMode(false);
     } catch (err: any) {
-      console.error('[GFIT-AUTH] Erro no disparo do reset:', err);
-      triggerFeedback('Erro ao enviar email de recuperação', 'error');
+      console.error('[GFIT-AUTH] Erro no disparo do Magic Link:', err);
+      triggerFeedback('Erro ao enviar link de recuperação', 'error');
     } finally {
       setIsLoggingIn(false);
     }
@@ -325,7 +330,7 @@ const App: React.FC = () => {
         {/* Modal de Recuperação de Senha */}
         {isRecoveryMode && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-6 animate-in fade-in duration-300">
-             <div className="bg-white rounded-[50px] p-12 max-w-sm w-full shadow-2xl space-y-6 text-center animate-in zoom-in-95">
+             <div className="bg-white rounded-[50px] p-12 max-sm w-full shadow-2xl space-y-6 text-center animate-in zoom-in-95">
                 <div className="text-4xl">📧</div>
                 <h3 className="text-2xl font-black text-slate-900 uppercase">Recuperar Acesso</h3>
                 <p className="text-slate-500 text-xs font-medium leading-relaxed">Enviaremos um link de recuperação para o seu e-mail cadastrado.</p>
