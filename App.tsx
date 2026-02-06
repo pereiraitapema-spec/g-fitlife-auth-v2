@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import HeaderSimple from './components/HeaderSimple';
@@ -166,12 +165,31 @@ const App: React.FC = () => {
     };
     init();
 
+    // Listener de Auth solicitado para debug e monitoramento de sessão
+    let authSubscription: any = null;
+    if (supabase) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        console.log('Auth event:', event, 'User:', session?.user?.id || 'null');
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          console.log('Usuário logado ou token renovado');
+        }
+        if (event === 'SIGNED_OUT') {
+          console.log('Usuário deslogado');
+        }
+      });
+      authSubscription = subscription;
+    }
+
     const handleSessionChange = () => {
       const s = storeService.getActiveSession();
       setSession(s);
     };
     window.addEventListener('sessionUpdated', handleSessionChange);
-    return () => window.removeEventListener('sessionUpdated', handleSessionChange);
+
+    return () => {
+      window.removeEventListener('sessionUpdated', handleSessionChange);
+      if (authSubscription) authSubscription.unsubscribe();
+    };
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {

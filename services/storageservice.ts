@@ -13,14 +13,25 @@ export const storageService = {
       throw new Error('Sistema de armazenamento offline. Verifique as chaves SUPABASE_URL e SUPABASE_ANON_KEY.');
     }
 
-    // 1. Gerar nome de arquivo único para evitar colisões
+    // 1. Verifica se o usuário está realmente logado (Requisito de Segurança RLS)
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (!session || !session.user) {
+      console.error('Erro: Usuário não autenticado para upload');
+      alert('Sua sessão expirou ou você não está logado. Por favor, faça login novamente antes de enviar a imagem.');
+      throw new Error('Usuário não logado');
+    }
+
+    console.log('Usuário autenticado para upload:', session.user.id);
+
+    // 2. Gerar nome de arquivo único para evitar colisões
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `${folder}/${fileName}`;
 
     console.log(`[STORAGE] Iniciando upload para: uploads/${filePath}`);
 
-    // 2. Executar Upload no bucket 'uploads'
+    // 3. Executar Upload no bucket 'uploads'
     const { data, error } = await supabase.storage
       .from('uploads')
       .upload(filePath, file, {
@@ -33,11 +44,12 @@ export const storageService = {
       throw new Error(`Erro no servidor de arquivos: ${error.message}`);
     }
 
-    // 3. Obter URL Pública (Certifique-se que o bucket 'uploads' é público no Supabase)
+    // 4. Obter URL Pública (Certifique-se que o bucket 'uploads' é público no Supabase)
     const { data: { publicUrl } } = supabase.storage
       .from('uploads')
       .getPublicUrl(filePath);
 
+    console.log('Upload sucesso:', publicUrl);
     return publicUrl;
   }
 };

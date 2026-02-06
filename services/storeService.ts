@@ -1,4 +1,3 @@
-
 import { 
   Order, Lead, Product, Coupon, OrderStatus, 
   AppUser, SystemSettings, UserRole, UserStatus, 
@@ -519,12 +518,28 @@ export const storeService = {
 
   async uploadFile(file: File): Promise<string> {
     if (!supabase) throw new Error('Supabase Inacessível.');
+    
+    // Verifica sessão antes do upload
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session || !session.user) {
+      console.error('Erro: Usuário não autenticado para upload');
+      alert('Faça login novamente antes de enviar a imagem');
+      throw new Error('Usuário não logado');
+    }
+    console.log('Usuário autenticado para upload (storeService):', session.user.id);
+
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `public/${fileName}`;
-    const { error: uploadError } = await supabase.storage.from('uploads').upload(filePath, file);
-    if (uploadError) throw new Error(`Falha no upload: ${uploadError.message}`);
+    const { data, error: uploadError } = await supabase.storage.from('uploads').upload(filePath, file);
+    
+    if (uploadError) {
+      console.error('Erro no upload:', uploadError);
+      throw new Error(`Falha no upload: ${uploadError.message}`);
+    }
+    
     const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filePath);
+    console.log('Upload sucesso:', data);
     return publicUrl;
   },
 
