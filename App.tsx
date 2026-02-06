@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import HeaderSimple from './components/HeaderSimple';
@@ -25,6 +26,7 @@ import AffiliatePortal from './pages/AffiliatePortal';
 import CustomerPortal from './pages/CustomerPortal';
 import AICoach from './components/AICoach';
 import LGPDBanner from './components/LGPDBanner';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 // Modulos Adicionais
 import MarketingBanners from './pages/MarketingBanners';
@@ -81,7 +83,7 @@ export type Route =
   | 'help-overview' | 'help-core-detail' | 'affiliate-register'
   | 'products-catalog' | 'orders' | 'store-catalog' | 'checkout' | 'store-offers' | 'public-contact'
   | 'public-home' | 'departments' | 'categories' | 'coupons' | 'favorites'
-  | 'affiliate-portal' | 'customer-portal'
+  | 'affiliate-portal' | 'customer-portal' | 'reset-password'
   | 'mkt-banners' | 'mkt-remkt' | 'mkt-chat'
   | 'seo-onpage' | 'seo-tech' | 'seo-perf' | 'seo-audit'
   | 'fin-gateways' | 'fin-trans' | 'fin-reports'
@@ -168,7 +170,10 @@ const App: React.FC = () => {
     if (supabase) {
       supabase.auth.onAuthStateChange((event) => {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') syncAuth();
-        if (event === 'PASSWORD_RECOVERY') setIsResetPasswordView(true);
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsResetPasswordView(true);
+          setCurrentRoute('reset-password'); // Direciona para a nova rota profissional
+        }
         if (event === 'SIGNED_OUT') {
            setSession(null);
            setIsResetPasswordView(false);
@@ -211,6 +216,7 @@ const App: React.FC = () => {
         storeService.logout();
         setSession(null);
         setViewMode('admin');
+        setCurrentRoute('public-home'); // Reset de rota para segurança
         triggerFeedback('Senha alterada com sucesso');
       } else {
         triggerFeedback(res.error || 'Erro na atualização.', 'error');
@@ -250,21 +256,13 @@ const App: React.FC = () => {
 
   if (!isSystemReady) return <div className="h-screen bg-slate-900 flex items-center justify-center animate-pulse text-white font-black text-4xl">G</div>;
 
-  // View de Redefinição de Senha (Link do Email)
-  if (isResetPasswordView) {
+  // View Especial de Redefinição de Senha via Nova Página/Componente
+  if (currentRoute === 'reset-password' || isResetPasswordView) {
     return (
-      <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
-         <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl text-center space-y-6">
-            <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl">🔐</div>
-            <h1 className="text-3xl font-black text-slate-900 uppercase">Nova Senha</h1>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Defina sua nova credencial segura.</p>
-            <form onSubmit={handleUpdatePassword} className="space-y-4 pt-4">
-                <input required disabled={isLoggingIn} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Nova senha (mín. 8)" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner" />
-                <input required disabled={isLoggingIn} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirmar nova senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner" />
-                <button disabled={isLoggingIn} className="w-full py-6 bg-emerald-500 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-600 transition-all shadow-xl">Salvar e Acessar</button>
-            </form>
-         </div>
-      </div>
+      <ResetPasswordPage 
+        onSuccess={() => handleLogout()} 
+        onCancel={() => handleLogout()} 
+      />
     );
   }
 
