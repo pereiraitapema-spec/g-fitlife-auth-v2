@@ -111,6 +111,8 @@ const App: React.FC = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [showResend, setShowResend] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
 
   const triggerFeedback = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setFeedback({ message, type });
@@ -148,8 +150,11 @@ const App: React.FC = () => {
         if (profile.status === UserStatus.ACTIVE) {
           const newSession = storeService.createSession(profile);
           setSession(newSession);
-          handleRoleLanding(profile.role);
-          triggerFeedback(`Bem-vindo, ${profile.name}!`);
+          if (profile.is_default_password) {
+            setMustChangePassword(true);
+          } else {
+            handleRoleLanding(profile.role);
+          }
         } else {
           setAuthError('Conta inativa.');
           await supabase.auth.signOut();
@@ -166,17 +171,13 @@ const App: React.FC = () => {
     };
     init();
 
-    // Listener de Auth solicitado para debug e monitoramento de sessão
     let authSubscription: any = null;
     if (supabase) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        console.log('Auth event:', event, 'User:', session?.user?.id || 'null');
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          console.log('Usuário logado ou token renovado');
-          syncAuth(); // Re-sincronizar perfil após confirmação de e-mail
+          syncAuth();
         }
         if (event === 'SIGNED_OUT') {
-          console.log('Usuário deslogado');
           setSession(null);
         }
       });
@@ -205,13 +206,36 @@ const App: React.FC = () => {
       const res = await storeService.login(loginEmail, loginPass);
       if (res.success && res.session) {
         setSession(res.session);
-        handleRoleLanding(res.session.userRole);
-        triggerFeedback('Acesso Autorizado!');
+        if (res.mustChangePassword) {
+          setMustChangePassword(true);
+          triggerFeedback('Por segurança, defina uma nova senha.', 'warning');
+        } else {
+          handleRoleLanding(res.session.userRole);
+          triggerFeedback('Acesso Autorizado!');
+        }
       } else {
         setAuthError(res.error || 'Credenciais inválidas');
         if (res.error?.toLowerCase().includes('confirmado')) {
           setShowResend(true);
         }
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    try {
+      const res = await storeService.updatePassword(newPassword);
+      if (res.success) {
+        setMustChangePassword(false);
+        if (session) handleRoleLanding(session.userRole);
+        triggerFeedback('Senha atualizada com sucesso!');
+      } else {
+        setAuthError(res.error || 'Falha ao atualizar senha.');
       }
     } finally {
       setIsLoggingIn(false);
@@ -233,6 +257,7 @@ const App: React.FC = () => {
     storeService.logout();
     setSession(null);
     setViewMode('store');
+    setMustChangePassword(false);
     setCurrentRoute('public-home');
     triggerFeedback('Sessão encerrada.');
   };
@@ -260,8 +285,7 @@ const App: React.FC = () => {
   if (viewMode === 'admin' && !session) {
     return (
       <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl">
-          <div className="text-center space-y-6">
+        <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl text-center space-y-6">
             <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl">G</div>
             <h1 className="text-3xl font-black text-slate-900 uppercase">G-Fit Login</h1>
             {authError && (
@@ -277,17 +301,28 @@ const App: React.FC = () => {
                 )}
               </div>
             )}
-            <form onSubmit={handleLogin} className="space-y-4 pt-4 text-left">
-               <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@gfitlife.io" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
-               <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••••" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
-               <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all">Autenticar</button>
-            </form>
-            <button type="button" onClick={() => storeService.loginWithGoogle()} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50">
-              <img src="https://img.icons8.com/color/24/google-logo.png" alt="Google" className="w-5 h-5" />
-              Google SSO
-            </button>
+            
+            {!mustChangePassword ? (
+              <form onSubmit={handleLogin} className="space-y-4 pt-4 text-left">
+                <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@gfitlife.io" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
+                <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••••" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
+                <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all">Autenticar</button>
+              </form>
+            ) : (
+              <form onSubmit={handleUpdatePassword} className="space-y-4 pt-4 text-left animate-in fade-in">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest text-center px-4">Defina sua senha definitiva para continuar.</p>
+                <input disabled={isLoggingIn} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Nova Senha Master" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
+                <button disabled={isLoggingIn} className="w-full py-6 bg-emerald-500 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-600 transition-all">Definir e Entrar</button>
+              </form>
+            )}
+
+            {!mustChangePassword && (
+              <button type="button" onClick={() => storeService.loginWithGoogle()} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50">
+                <img src="https://img.icons8.com/color/24/google-logo.png" alt="Google" className="w-5 h-5" />
+                Google SSO
+              </button>
+            )}
             <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 uppercase underline mt-4">Vitrine Pública</button>
-          </div>
         </div>
       </div>
     );

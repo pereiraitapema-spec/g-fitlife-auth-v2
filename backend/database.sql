@@ -46,8 +46,10 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
     is_master_email BOOLEAN;
+    is_google_auth BOOLEAN;
 BEGIN
   is_master_email := (new.email = 'pereira.itapema@gmail.com');
+  is_google_auth := (new.raw_app_meta_data->>'provider' = 'google');
 
   INSERT INTO public.user_profile (id, email, name, role, status, is_default_password)
   VALUES (
@@ -56,10 +58,11 @@ BEGIN
     COALESCE(new.raw_user_meta_data->>'full_name', 'Membro G-Fit'), 
     CASE WHEN is_master_email THEN 'admin_master' ELSE 'customer' END, 
     'active',
-    NOT (new.raw_app_meta_data->>'provider' = 'google') -- Se for Google, não precisa trocar senha padrão
+    CASE WHEN is_google_auth THEN FALSE ELSE is_master_email END -- Exige troca de senha apenas para o master via email/senha inicial
   )
   ON CONFLICT (id) DO UPDATE SET 
-    role = CASE WHEN is_master_email THEN 'admin_master' ELSE user_profile.role END;
+    role = CASE WHEN is_master_email THEN 'admin_master' ELSE user_profile.role END,
+    is_default_password = EXCLUDED.is_default_password;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

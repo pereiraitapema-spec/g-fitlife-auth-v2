@@ -31,7 +31,6 @@ export const storeService = {
       });
 
       if (error) {
-        // Tratamento específico para e-mail não confirmado
         if (error.message.toLowerCase().includes('email not confirmed')) {
           return { success: false, error: 'E-mail ainda não verificado. Por favor, cheque sua caixa de entrada.' };
         }
@@ -53,7 +52,7 @@ export const storeService = {
             session, 
             profile, 
             isStaff,
-            mustChangePassword: profile.isDefaultPassword || false 
+            mustChangePassword: profile.is_default_password || false 
           };
         }
       }
@@ -64,8 +63,26 @@ export const storeService = {
   },
 
   /**
+   * ATUALIZAÇÃO DE SENHA (Obrigatório no primeiro acesso)
+   */
+  async updatePassword(newPass: string) {
+    if (!supabase) return { success: false, error: 'Supabase Offline' };
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPass });
+      if (error) return { success: false, error: error.message };
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('user_profile').update({ is_default_password: false }).eq('id', user.id);
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: 'Falha ao atualizar senha.' };
+    }
+  },
+
+  /**
    * REGISTRO DE USUÁRIO (Fluxo de E-mail)
-   * Dispara automaticamente o e-mail de verificação configurado no SMTP do Supabase.
    */
   async register(email: string, pass: string, name: string) {
     if (!supabase) return { success: false, error: 'Serviço de autenticação offline.' };
@@ -97,9 +114,6 @@ export const storeService = {
     }
   },
 
-  /**
-   * REENVIAR E-MAIL DE VERIFICAÇÃO
-   */
   async resendVerificationEmail(email: string) {
     if (!supabase) return { success: false, error: 'Supabase Offline' };
     const { error } = await supabase.auth.resend({
@@ -130,17 +144,14 @@ export const storeService = {
   async getProfileAfterLogin(userId: string) {
     if (!supabase) return null;
     
-    // Busca perfil atual
     let { data: profile } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
     
-    // Obtém dados do Auth User para verificação de email master
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return profile;
 
     const email = authUser.email?.toLowerCase();
     const isMasterEmail = email === MASTER_EMAIL;
 
-    // Se perfil existe, garante que o email master seja sempre ADMIN_MASTER
     if (profile) {
       if (isMasterEmail && profile.role !== UserRole.ADMIN_MASTER) {
         const { data: updated } = await supabase.from('user_profile')
@@ -153,7 +164,6 @@ export const storeService = {
       return profile;
     }
 
-    // Criar perfil se não existir (Primeiro Login)
     const newProfile = {
       id: authUser.id,
       email: email,
@@ -161,7 +171,7 @@ export const storeService = {
       role: isMasterEmail ? UserRole.ADMIN_MASTER : UserRole.CUSTOMER,
       status: UserStatus.ACTIVE,
       login_type: 'hybrid',
-      is_default_password: true, // Flag para exigir troca de senha no primeiro acesso por email
+      is_default_password: !authUser.app_metadata.provider || authUser.app_metadata.provider === 'email', 
       created_at: new Date().toISOString()
     };
     
@@ -280,7 +290,6 @@ export const storeService = {
     window.dispatchEvent(new Event('usersChanged'));
   },
 
-  // PRODUCTS & SALES
   async getProducts(): Promise<Product[]> { 
     if (!supabase) return [];
     const { data } = await supabase.from('products').select('*').order('name');
@@ -314,7 +323,6 @@ export const storeService = {
     window.dispatchEvent(new Event('ordersChanged'));
   },
 
-  // DEPARTMENTS & CATEGORIES
   async getDepartments(): Promise<Department[]> { 
     if (!supabase) return [];
     const { data } = await supabase.from('departments').select('*');
@@ -336,7 +344,6 @@ export const storeService = {
     window.dispatchEvent(new Event('categoriesChanged'));
   },
 
-  // MARKETING & AFFILIATES
   async getBanners(): Promise<Banner[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('banners').select('*').order('id');
@@ -389,7 +396,6 @@ export const storeService = {
     return data || [];
   },
 
-  // FAVORITES
   async getFavorites(userId: string): Promise<Product[]> {
     if (!supabase) return [];
     const { data: favs } = await supabase.from('user_favorites').select('productId').eq('userId', userId);
@@ -415,7 +421,6 @@ export const storeService = {
     return !!data;
   },
 
-  // LOGS & TELEMETRY
   async getSystemLogs(): Promise<SystemLog[]> { 
     if (!supabase) return [];
     const { data } = await supabase.from('system_logs').select('*').order('timestamp', { ascending: false }).limit(50);
@@ -458,7 +463,6 @@ export const storeService = {
     });
   },
 
-  // INFRA & INTEGRATIONS
   async getSessions(): Promise<UserSession[]> { 
     const active = this.getActiveSession();
     return active ? [active] : [];
@@ -507,7 +511,6 @@ export const storeService = {
     await supabase.from('external_api_configs').upsert(cfg);
   },
 
-  // AI & PREDICTIONS
   async getAIRecommendations(): Promise<AIRecommendation[]> { 
     if (!supabase) return [];
     const { data } = await supabase.from('ai_recommendations').select('*');
@@ -533,7 +536,6 @@ export const storeService = {
     return data || [];
   },
 
-  // LOGISTICS
   async getCarriers(): Promise<Carrier[]> { 
     if (!supabase) return [];
     const { data } = await supabase.from('carriers').select('*');
@@ -545,7 +547,6 @@ export const storeService = {
     return data || [];
   },
 
-  // FINANCE
   async getGateways(): Promise<PaymentGateway[]> { 
     if (!supabase) return [];
     const { data } = await supabase.from('gateways').select('*');
@@ -561,7 +562,6 @@ export const storeService = {
     return data || [];
   },
 
-  // SELLERS
   async getSellers(): Promise<Seller[]> { 
     if (!supabase) return [];
     const { data } = await supabase.from('sellers').select('*');
@@ -572,7 +572,6 @@ export const storeService = {
     await supabase.from('sellers').upsert(s);
   },
 
-  // HELP & UTILS
   getRoles(): RoleDefinition[] {
     return [
       { id: UserRole.ADMIN_MASTER, label: 'Admin Master', permissions: [] },
@@ -597,7 +596,6 @@ export const storeService = {
   async uploadFile(file: File): Promise<string> {
     if (!supabase) throw new Error('Supabase Inacessível.');
     
-    // Verifica sessão antes do upload
     const { data: { session } } = await supabase.auth.getSession();
     if (!session || !session.user) {
       console.error('Erro: Usuário não autenticado para upload');
@@ -672,7 +670,6 @@ export const storeService = {
     return data || [];
   },
 
-  // Remarketing methods
   async getRemarketingLogs(): Promise<RemarketingLog[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('remarketing_logs').select('*').order('sentAt', { ascending: false });
@@ -695,7 +692,6 @@ export const storeService = {
     await supabase.from('remarketing_logs').insert(log);
   },
 
-  // Chat IA methods
   async getChatSessions(): Promise<AIChatSession[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('chat_sessions').select('*').order('createdAt', { ascending: false });
@@ -706,7 +702,6 @@ export const storeService = {
     await supabase.from('chat_sessions').update({ status }).eq('id', id);
   },
 
-  // Security methods
   async updateMyCredentials(userId: string, email: string, password?: string): Promise<boolean> {
     if (!supabase) return false;
     const updateData: any = { email };
@@ -722,14 +717,12 @@ export const storeService = {
     return data || [];
   },
 
-  // Environment methods
   async updateEnvironment(environment: 'production' | 'staging' | 'development'): Promise<void> {
     if (!supabase) return;
     await supabase.from('core_settings').update({ environment }).eq('key', 'geral');
     window.dispatchEvent(new Event('systemSettingsChanged'));
   },
 
-  // LGPD methods
   getUserPersonalData(email: string): any {
     return { user: { email }, orders: [], leads: [] };
   },
@@ -741,7 +734,6 @@ export const storeService = {
     await this.logLGPD('data_deletion', email, 'Usuário solicitou exclusão definitiva de dados.');
   },
 
-  // PWA methods
   getPWAMetrics(): any {
     return { installs: 124, activeUsersMobile: 86, version: '1.2.0' };
   },
@@ -762,7 +754,6 @@ export const storeService = {
     await supabase.from('pwa_notifications').insert(notif);
   },
 
-  // Integration methods
   async syncCRM(provider: string): Promise<void> {
     if (!supabase) return;
     await supabase.from('external_api_configs').update({ lastSync: new Date().toISOString() }).eq('provider', provider);
@@ -777,7 +768,6 @@ export const storeService = {
     return data || [];
   },
 
-  // WhatsApp methods
   async getWAMessages(): Promise<WhatsAppMessage[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('wa_messages').select('*').order('timestamp', { ascending: false });
