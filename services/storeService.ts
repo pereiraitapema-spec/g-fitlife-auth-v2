@@ -35,7 +35,13 @@ export const storeService = {
         password: pass
       });
 
-      if (error) return { success: false, error: 'Credenciais inválidas.' };
+      if (error) {
+        // Tratamento específico para e-mail não confirmado
+        if (error.message.toLowerCase().includes('email not confirmed')) {
+          return { success: false, error: 'E-mail ainda não verificado. Por favor, cheque sua caixa de entrada.' };
+        }
+        return { success: false, error: 'Credenciais inválidas.' };
+      }
       
       if (data.user) {
         const profile = await this.getProfileAfterLogin(data.user.id);
@@ -85,6 +91,23 @@ export const storeService = {
     } catch (err) {
       return { success: false, error: 'Erro ao processar registro.' };
     }
+  },
+
+  /**
+   * REENVIAR E-MAIL DE VERIFICAÇÃO
+   * Permite que usuários existentes recebam novamente o link de confirmação.
+   */
+  async resendVerificationEmail(email: string) {
+    if (!supabase) return { success: false, error: 'Supabase Offline' };
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim().toLowerCase(),
+      options: {
+        emailRedirectTo: window.location.origin
+      }
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   },
 
   async loginWithGoogle() {
