@@ -55,6 +55,38 @@ export const storeService = {
     return { success: false, error: 'Perfil não encontrado.' };
   },
 
+  /**
+   * REGISTRO DE USUÁRIO (Fluxo de E-mail)
+   * Dispara automaticamente o e-mail de verificação configurado no SMTP do Supabase.
+   */
+  async register(email: string, pass: string, name: string) {
+    if (!supabase) return { success: false, error: 'Serviço de autenticação offline.' };
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password: pass,
+        options: {
+          data: {
+            full_name: name,
+          },
+          // O e-mail de confirmação é disparado pelo Supabase se habilitado no dashboard
+          emailRedirectTo: window.location.origin
+        }
+      });
+
+      if (error) return { success: false, error: error.message };
+      
+      return { 
+        success: true, 
+        user: data.user,
+        message: 'Verifique sua caixa de entrada para confirmar o cadastro.' 
+      };
+    } catch (err) {
+      return { success: false, error: 'Erro ao processar registro.' };
+    }
+  },
+
   async loginWithGoogle() {
     if (!supabase) return { success: false, error: 'Auth Social Inativo.' };
     try {
