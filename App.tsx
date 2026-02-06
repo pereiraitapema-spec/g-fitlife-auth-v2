@@ -227,12 +227,13 @@ const App: React.FC = () => {
 
   /**
    * FLUXO PROFISSIONAL DE RECUPERAÇÃO DE ACESSO (MAGIC LINK)
-   * Envia link de acesso direto que obriga o usuário a redefinir a senha no destino.
+   * Utiliza signInWithOtp para gerar Magic Link redirecionando para redefinição segura.
    */
   const handleRecover = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e) e.preventDefault();
     
-    if (!loginEmail || !loginEmail.includes('@')) {
+    const email = loginEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
       triggerFeedback('Por favor, informe um e-mail válido.', 'error');
       return;
     }
@@ -241,11 +242,11 @@ const App: React.FC = () => {
     setIsLoggingIn(true);
     
     try {
-      if (!supabase) throw new Error("Serviço Auth indisponível.");
+      if (!supabase) throw new Error("Serviço de Autenticação indisponível.");
       
-      // DISPARO DE MAGIC LINK CONFORME REQUISITO PROFISSIONAL
+      // DISPARO DE MAGIC LINK PROFISSIONAL
       const { error } = await supabase.auth.signInWithOtp({
-        email: loginEmail.trim().toLowerCase(),
+        email: email,
         options: {
           emailRedirectTo: 'https://g-fitlife-auth-v2-production.up.railway.app/reset-password'
         }
@@ -257,7 +258,7 @@ const App: React.FC = () => {
       triggerFeedback('Link de recuperação enviado. Verifique seu email.', 'success');
       setIsRecoveryMode(false);
     } catch (err: any) {
-      console.error('[GFIT-AUTH] Erro no envio do Magic Link:', err);
+      console.error('[GFIT-AUTH] Erro ao disparar recuperação:', err);
       triggerFeedback('Erro ao enviar link de recuperação', 'error');
     } finally {
       setIsLoggingIn(false);

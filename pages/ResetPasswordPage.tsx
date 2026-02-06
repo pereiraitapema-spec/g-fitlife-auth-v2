@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { storeService } from '../services/storeService';
 import { supabase } from '../backend/supabaseClient';
 
 interface ResetPasswordPageProps {
@@ -24,15 +23,15 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
     }
 
     if (newPassword !== confirmPassword) {
-      setError('As senhas digitadas não coincidem.');
+      setError('As senhas não coincidem. Digite novamente.');
       return;
     }
 
     setLoading(true);
     try {
-      if (!supabase) throw new Error("Supabase Offline");
+      if (!supabase) throw new Error("Servidor de banco offline.");
 
-      // Ação Obrigatória: Atualizar no Supabase
+      // Ação Supabase: Atualizar credencial do usuário logado via Magic Link
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       
       if (updateError) {
@@ -40,7 +39,7 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
         setError(updateError.message || 'Falha ao atualizar senha. O link pode ter expirado.');
       } else {
         console.log("PASSWORD_UPDATE_OK");
-        alert('Senha atualizada com sucesso! Por segurança, realize o login novamente.');
+        alert('Senha atualizada com sucesso! Realize o login novamente com sua nova credencial.');
         onSuccess();
       }
     } catch (err) {
@@ -62,7 +61,7 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
 
         <div className="space-y-2">
           <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Nova Senha</h1>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Redefinição de Acesso Seguro</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Definição de Acesso Seguro</p>
         </div>
 
         {error && (
@@ -80,20 +79,20 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
               type="password" 
               value={newPassword} 
               onChange={e => setNewPassword(e.target.value)} 
-              placeholder="Min. 8 caracteres" 
+              placeholder="Digite 8 ou mais caracteres" 
               className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-3xl p-6 outline-none font-bold shadow-inner transition-all" 
             />
           </div>
 
           <div className="space-y-2 text-left">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Repetir Senha</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Confirmar Nova Senha</label>
             <input 
               required
               disabled={loading}
               type="password" 
               value={confirmPassword} 
               onChange={e => setConfirmPassword(e.target.value)} 
-              placeholder="Confirme sua senha" 
+              placeholder="Repita a senha para confirmar" 
               className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-3xl p-6 outline-none font-bold shadow-inner transition-all" 
             />
           </div>
@@ -120,13 +119,13 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
               onClick={onCancel}
               className="w-full py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
             >
-              Cancelar e Voltar
+              Cancelar e Sair
             </button>
           </div>
         </form>
 
         <p className="text-[9px] text-slate-400 font-medium italic">
-          Obrigatório preencher ambos os campos com valores idênticos para prosseguir.
+          Obrigatório preencher a confirmação corretamente para prosseguir.
         </p>
       </div>
     </div>
