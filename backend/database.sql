@@ -1,4 +1,4 @@
--- 1. Tabela singular user_profile (Regra suprema)
+-- 1. Tabela singular user_profile (Fonte de Verdade)
 CREATE TABLE IF NOT EXISTS public.user_profile (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS public.tracking_links (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ATIVAÇÃO DE RLS (SEGURANÇA)
+-- ATIVAÇÃO DE RLS
 ALTER TABLE public.user_profile ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.core_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tracking_links ENABLE ROW LEVEL SECURITY;
@@ -54,57 +54,60 @@ CREATE POLICY "Perfil visível pelo próprio usuário" ON public.user_profile FO
 CREATE POLICY "Afiliados podem ver seus links" ON public.tracking_links FOR SELECT USING (true);
 CREATE POLICY "Adição de links livre para admin" ON public.tracking_links FOR ALL USING (true);
 
--- 4. CONFIGURAÇÃO DE STORAGE (uploads)
--- Garante que o bucket existe (Executar no SQL Editor do Supabase)
--- INSERT INTO storage.buckets (id, name, public) VALUES ('uploads', 'uploads', true) ON CONFLICT (id) DO NOTHING;
-
--- Policy para INSERT: Apenas usuários autenticados (auth.uid() IS NOT NULL)
-DO $$ 
-BEGIN
-    -- Remover antigas para evitar duplicidade
-    DELETE FROM storage.policies WHERE name = 'Permitir upload para autenticados';
-    DELETE FROM storage.policies WHERE name = 'Acesso público para leitura';
-    
-    INSERT INTO storage.policies (name, color, definition, check, operation, bucket_id)
-    VALUES ('Permitir upload para autenticados', 'emerald', null, '(auth.uid() IS NOT NULL)', 'INSERT', 'uploads');
-    
-    INSERT INTO storage.policies (name, color, definition, check, operation, bucket_id)
-    VALUES ('Acesso público para leitura', 'blue', '(bucket_id = ''uploads'')', null, 'SELECT', 'uploads');
-END $$;
-
--- 5. TRIGGER PARA AUTO-CRIAÇÃO DE PERFIL NO AUTH SIGNUP
--- CORREÇÃO PARA ERRO 500: Usar ON CONFLICT(email) para assumir perfis pré-existentes e SECURITY DEFINER
+-- 4. TRIGGER DEFINITIVA PARA AUTO-CRIAÇÃO E RECUPERAÇÃO DE ACESSO MASTER
+-- CORREÇÃO: Usa coluna 'name' (correto) em vez de 'full_name' (errado).
+-- CORREÇÃO: Promove automaticamente o dono do sistema a admin_master.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
-DECLARE
-    is_master_email BOOLEAN;
 BEGIN
-  is_master_email := (new.email IN ('master@gfitlife.com', 'pereira.itapema@gmail.com'));
+  -- 1. Tentar atualizar um perfil existente que tenha o mesmo e-mail mas ID diferente
+  -- IMPORTANTE: Se o e-mail for o seu, garantimos que o cargo seja admin_master
+  UPDATE public.user_profile
+  SET id = NEW.id,
+      name = COALESCE(NEW.raw_user_meta_data->>'full_name', name, 'Membro G-Fit'),
+      role = CASE 
+        WHEN (NEW.email IN ('master@gfitlife.com', 'pereira.itapema@gmail.com')) THEN 'admin_master' 
+        ELSE role 
+      END
+  WHERE email = NEW.email;
 
-  INSERT INTO public.user_profile (id, email, name, role, status, is_default_password)
-  VALUES (
-    new.id, 
-    new.email, 
-    COALESCE(new.raw_user_meta_data->>'full_name', 'Membro G-Fit'), 
-    CASE WHEN is_master_email THEN 'admin_master' ELSE 'customer' END, 
-    'active',
-    CASE WHEN (new.raw_app_meta_data->>'provider' = 'google') THEN FALSE ELSE TRUE END 
-  )
-  ON CONFLICT (email) DO UPDATE SET 
-    id = EXCLUDED.id, -- Sincroniza o ID do Auth com o perfil pre-existente (Fundamental para evitar erro 500)
-    name = COALESCE(EXCLUDED.name, user_profile.name),
-    role = CASE WHEN is_master_email THEN 'admin_master' ELSE user_profile.role END,
-    is_default_password = EXCLUDED.is_default_password;
-  
+  -- 2. Se nenhum perfil foi atualizado (usuário novo), insere um novo
+  IF NOT FOUND THEN
+    INSERT INTO public.user_profile (id, email, name, role, status, is_default_password)
+    VALUES (
+      NEW.id, 
+      NEW.email, 
+      COALESCE(NEW.raw_user_meta_data->>'full_name', 'Membro G-Fit'), 
+      CASE 
+        WHEN (NEW.email IN ('master@gfitlife.com', 'pereira.itapema@gmail.com')) THEN 'admin_master' 
+        ELSE 'customer' 
+      END, 
+      'active',
+      FALSE
+    );
+  END IF;
+
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Reiniciar Trigger
+DROP TRIGGER IF EXISTS sync_user_profile ON auth.users;
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- Garantir permissões de acesso para o usuário de auth do Supabase
-GRANT ALL ON public.user_profile TO postgres, service_role;
+-- Garantir que o bucket uploads seja acessível
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'uploads') THEN
+        DELETE FROM storage.policies WHERE bucket_id = 'uploads';
+        
+        INSERT INTO storage.policies (name, color, definition, check, operation, bucket_id)
+        VALUES ('Permitir upload para autenticados', 'emerald', null, '(auth.uid() IS NOT NULL)', 'INSERT', 'uploads');
+        
+        INSERT INTO storage.policies (name, color, definition, check, operation, bucket_id)
+        VALUES ('Acesso público para leitura', 'blue', '(bucket_id = ''uploads'')', null, 'SELECT', 'uploads');
+    END IF;
+END $$;
