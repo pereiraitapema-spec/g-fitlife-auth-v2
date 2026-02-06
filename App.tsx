@@ -226,12 +226,12 @@ const App: React.FC = () => {
   };
 
   /**
-   * CORREÇÃO: Função de recuperação de senha disparando email oficial com redirectTo produção
+   * CORREÇÃO: Função de recuperação de senha com log de auditoria e chamada direta ao Supabase
    */
-  const handleRecover = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRecover = async (e?: React.FormEvent | React.MouseEvent) => {
+    console.log("RECOVER_CLICK_OK");
+    if (e) e.preventDefault();
     
-    // Validação básica de segurança
     if (!loginEmail || !loginEmail.includes('@')) {
       triggerFeedback('E-mail inválido.', 'error');
       return;
@@ -241,19 +241,19 @@ const App: React.FC = () => {
     setIsLoggingIn(true);
     
     try {
-      // Chama a persistência no Supabase via storeService
-      const res = await storeService.recoverPassword(loginEmail);
+      if (!supabase) throw new Error("Serviço Auth indisponível.");
       
-      if (res.success) {
-        triggerFeedback('Email de recuperação enviado');
-        setIsRecoveryMode(false);
-      } else {
-        console.error('[GFIT-AUTH] Erro na solicitação de reset:', res.error);
-        triggerFeedback(res.error || 'Falha ao processar solicitação.', 'error');
-      }
-    } catch (err) {
-      console.error('[GFIT-AUTH] Exceção crítica no fluxo de reset:', err);
-      triggerFeedback('Erro de comunicação com o servidor Auth.', 'error');
+      const { error } = await supabase.auth.resetPasswordForEmail(loginEmail.trim().toLowerCase(), {
+        redirectTo: "https://g-fitlife-auth-v2-production.up.railway.app/reset-password"
+      });
+      
+      if (error) throw error;
+
+      triggerFeedback('Email de recuperação enviado');
+      setIsRecoveryMode(false);
+    } catch (err: any) {
+      console.error('[GFIT-AUTH] Erro no disparo do reset:', err);
+      triggerFeedback('Erro ao enviar email de recuperação', 'error');
     } finally {
       setIsLoggingIn(false);
     }
@@ -329,9 +329,16 @@ const App: React.FC = () => {
                 <div className="text-4xl">📧</div>
                 <h3 className="text-2xl font-black text-slate-900 uppercase">Recuperar Acesso</h3>
                 <p className="text-slate-500 text-xs font-medium leading-relaxed">Enviaremos um link de recuperação para o seu e-mail cadastrado.</p>
-                <form onSubmit={handleRecover} className="space-y-4">
+                <form onSubmit={(e) => handleRecover(e)} className="space-y-4">
                    <input required type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="Seu e-mail de acesso" className="w-full bg-slate-50 border-none rounded-2xl p-6 outline-none font-bold shadow-inner" />
-                   <button disabled={isLoggingIn} className="w-full py-5 bg-emerald-500 text-white rounded-[24px] font-black text-xs uppercase shadow-xl hover:bg-emerald-600 transition-all">{isLoggingIn ? 'ENVIANDO...' : 'Enviar link de recuperação'}</button>
+                   <button 
+                     type="submit"
+                     onClick={(e) => handleRecover(e)}
+                     disabled={isLoggingIn} 
+                     className="w-full py-5 bg-emerald-500 text-white rounded-[24px] font-black text-xs uppercase shadow-xl hover:bg-emerald-600 transition-all"
+                   >
+                     {isLoggingIn ? 'ENVIANDO...' : 'Enviar link de recuperação'}
+                   </button>
                    <button type="button" onClick={() => setIsRecoveryMode(false)} className="w-full py-3 text-[10px] font-black text-slate-400 uppercase hover:text-slate-900">Voltar</button>
                 </form>
              </div>
