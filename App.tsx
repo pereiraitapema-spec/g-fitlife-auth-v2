@@ -226,18 +226,36 @@ const App: React.FC = () => {
   };
 
   /**
-   * CORREÇÃO: Função de recuperação de senha disparando email oficial
+   * CORREÇÃO: Função de recuperação de senha disparando email oficial com redirectTo produção
    */
   const handleRecover = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validação básica de segurança
+    if (!loginEmail || !loginEmail.includes('@')) {
+      triggerFeedback('E-mail inválido.', 'error');
+      return;
+    }
+
+    if (isLoggingIn) return;
     setIsLoggingIn(true);
-    const res = await storeService.recoverPassword(loginEmail);
-    setIsLoggingIn(false);
-    if (res.success) {
-      triggerFeedback('Email de redefinição enviado. Verifique sua caixa de entrada.');
-      setIsRecoveryMode(false);
-    } else {
-      triggerFeedback(res.error || 'Não foi possível enviar o email de redefinição.', 'error');
+    
+    try {
+      // Chama a persistência no Supabase via storeService
+      const res = await storeService.recoverPassword(loginEmail);
+      
+      if (res.success) {
+        triggerFeedback('Email de recuperação enviado');
+        setIsRecoveryMode(false);
+      } else {
+        console.error('[GFIT-AUTH] Erro na solicitação de reset:', res.error);
+        triggerFeedback(res.error || 'Falha ao processar solicitação.', 'error');
+      }
+    } catch (err) {
+      console.error('[GFIT-AUTH] Exceção crítica no fluxo de reset:', err);
+      triggerFeedback('Erro de comunicação com o servidor Auth.', 'error');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
