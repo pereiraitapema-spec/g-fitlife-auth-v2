@@ -105,14 +105,16 @@ const App: React.FC = () => {
   const [cart, setCart] = useState<Product[]>([]);
   const [feedback, setFeedback] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
   
-  // Login states
+  // Login & Recovery states
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [showResend, setShowResend] = useState(false);
   const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false); // Modal Solicitação
+  const [isResetPasswordView, setIsResetPasswordView] = useState(false); // View de Redefinição Real
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const triggerFeedback = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setFeedback({ message, type });
@@ -120,14 +122,7 @@ const App: React.FC = () => {
   };
 
   const handleRoleLanding = (role: UserRole) => {
-    const staffRoles = [
-      UserRole.ADMIN_MASTER, 
-      UserRole.ADMIN_OPERATIONAL, 
-      UserRole.FINANCE, 
-      UserRole.MARKETING,
-      UserRole.SELLER
-    ];
-
+    const staffRoles = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING, UserRole.SELLER];
     if (staffRoles.includes(role)) {
       setViewMode('admin');
       setCurrentRoute('dashboard');
@@ -150,10 +145,9 @@ const App: React.FC = () => {
         if (profile.status === UserStatus.ACTIVE) {
           const newSession = storeService.createSession(profile);
           setSession(newSession);
-          if (profile.is_default_password) {
-            setMustChangePassword(true);
-          } else {
-            handleRoleLanding(profile.role);
+          if (!isResetPasswordView) {
+             if (profile.isDefaultPassword) setMustChangePassword(true);
+             else handleRoleLanding(profile.role);
           }
         } else {
           setAuthError('Conta inativa.');
@@ -171,53 +165,31 @@ const App: React.FC = () => {
     };
     init();
 
-    let authSubscription: any = null;
     if (supabase) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          syncAuth();
-        }
+      supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') syncAuth();
+        if (event === 'PASSWORD_RECOVERY') setIsResetPasswordView(true);
         if (event === 'SIGNED_OUT') {
-          setSession(null);
+           setSession(null);
+           setIsResetPasswordView(false);
         }
       });
-      authSubscription = subscription;
     }
-
-    const handleSessionChange = () => {
-      const s = storeService.getActiveSession();
-      setSession(s);
-    };
-    window.addEventListener('sessionUpdated', handleSessionChange);
-
-    return () => {
-      window.removeEventListener('sessionUpdated', handleSessionChange);
-      if (authSubscription) authSubscription.unsubscribe();
-    };
-  }, []);
+  }, [isResetPasswordView]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoggingIn) return;
     setIsLoggingIn(true);
     setAuthError(null);
-    setShowResend(false);
     try {
       const res = await storeService.login(loginEmail, loginPass);
       if (res.success && res.session) {
         setSession(res.session);
-        if (res.mustChangePassword) {
-          setMustChangePassword(true);
-          triggerFeedback('Por segurança, defina uma nova senha.', 'warning');
-        } else {
-          handleRoleLanding(res.session.userRole);
-          triggerFeedback('Acesso Autorizado!');
-        }
+        if (res.mustChangePassword) setMustChangePassword(true);
+        else handleRoleLanding(res.session.userRole);
       } else {
         setAuthError(res.error || 'Credenciais inválidas');
-        if (res.error?.toLowerCase().includes('confirmado')) {
-          setShowResend(true);
-        }
       }
     } finally {
       setIsLoggingIn(false);
@@ -227,29 +199,37 @@ const App: React.FC = () => {
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoggingIn) return;
+    if (newPassword.length < 8) return triggerFeedback('Mínimo 8 caracteres.', 'error');
+    if (newPassword !== confirmPassword) return triggerFeedback('Senhas não coincidem.', 'error');
+
     setIsLoggingIn(true);
     try {
       const res = await storeService.updatePassword(newPassword);
       if (res.success) {
         setMustChangePassword(false);
-        if (session) handleRoleLanding(session.userRole);
-        triggerFeedback('Senha atualizada com sucesso!');
+        setIsResetPasswordView(false);
+        storeService.logout();
+        setSession(null);
+        setViewMode('admin');
+        triggerFeedback('Senha alterada com sucesso');
       } else {
-        setAuthError(res.error || 'Falha ao atualizar senha.');
+        triggerFeedback(res.error || 'Erro na atualização.', 'error');
       }
     } finally {
       setIsLoggingIn(false);
     }
   };
 
-  const handleResendEmail = async () => {
-    if (!loginEmail) return;
-    const res = await storeService.resendVerificationEmail(loginEmail);
+  const handleRecover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    const res = await storeService.recoverPassword(loginEmail);
+    setIsLoggingIn(false);
     if (res.success) {
-      triggerFeedback('E-mail de confirmação reenviado!');
-      setShowResend(false);
+      triggerFeedback('Email de recuperação enviado. Verifique sua caixa de entrada.');
+      setIsRecoveryMode(false);
     } else {
-      triggerFeedback('Falha ao reenviar: ' + res.error, 'error');
+      triggerFeedback('Não foi possível enviar o email. Verifique o endereço informado.', 'error');
     }
   };
 
@@ -258,8 +238,8 @@ const App: React.FC = () => {
     setSession(null);
     setViewMode('store');
     setMustChangePassword(false);
+    setIsResetPasswordView(false);
     setCurrentRoute('public-home');
-    triggerFeedback('Sessão encerrada.');
   };
 
   const handleNavigate = (route: Route) => {
@@ -268,15 +248,22 @@ const App: React.FC = () => {
     if (window.innerWidth <= 1024) setIsSidebarOpen(false);
   };
 
-  const handleAddToCart = (p: Product) => {
-    setCart(prev => [...prev, p]);
-    triggerFeedback(`${p.name} adicionado!`);
-  };
+  if (!isSystemReady) return <div className="h-screen bg-slate-900 flex items-center justify-center animate-pulse text-white font-black text-4xl">G</div>;
 
-  if (!isSystemReady) {
+  // View de Redefinição de Senha (Link do Email)
+  if (isResetPasswordView) {
     return (
-      <div className="h-screen bg-slate-900 flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
+         <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl text-center space-y-6">
+            <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl">🔐</div>
+            <h1 className="text-3xl font-black text-slate-900 uppercase">Nova Senha</h1>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Defina sua nova credencial segura.</p>
+            <form onSubmit={handleUpdatePassword} className="space-y-4 pt-4">
+                <input required disabled={isLoggingIn} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Nova senha (mín. 8)" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner" />
+                <input required disabled={isLoggingIn} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirmar nova senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner" />
+                <button disabled={isLoggingIn} className="w-full py-6 bg-emerald-500 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-600 transition-all shadow-xl">Salvar e Acessar</button>
+            </form>
+         </div>
       </div>
     );
   }
@@ -288,42 +275,50 @@ const App: React.FC = () => {
         <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl text-center space-y-6">
             <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl">G</div>
             <h1 className="text-3xl font-black text-slate-900 uppercase">G-Fit Login</h1>
-            {authError && (
-              <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase space-y-3">
-                <p>{authError}</p>
-                {showResend && (
-                  <button 
-                    onClick={handleResendEmail}
-                    className="w-full py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all"
-                  >
-                    REENVIAR E-MAIL AGORA
-                  </button>
-                )}
-              </div>
-            )}
+            {authError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase">{authError}</div>}
             
             {!mustChangePassword ? (
               <form onSubmit={handleLogin} className="space-y-4 pt-4 text-left">
-                <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@gfitlife.io" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
-                <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••••" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
+                <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="E-mail de acesso" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner" required />
+                <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="Senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner" required />
+                <div className="flex justify-between items-center px-4">
+                   <button type="button" onClick={() => setIsRecoveryMode(true)} className="text-[9px] font-black text-slate-400 uppercase hover:text-emerald-500 transition-colors">Esqueci minha senha?</button>
+                </div>
                 <button disabled={isLoggingIn} className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-500 transition-all">Autenticar</button>
               </form>
             ) : (
-              <form onSubmit={handleUpdatePassword} className="space-y-4 pt-4 text-left animate-in fade-in">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest text-center px-4">Defina sua senha definitiva para continuar.</p>
-                <input disabled={isLoggingIn} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Nova Senha Master" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
-                <button disabled={isLoggingIn} className="w-full py-6 bg-emerald-500 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-600 transition-all">Definir e Entrar</button>
+              <form onSubmit={handleUpdatePassword} className="space-y-4 pt-4 text-left">
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest text-center">⚠️ Defina sua senha definitiva.</p>
+                <input disabled={isLoggingIn} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Nova senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner" required />
+                <input disabled={isLoggingIn} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirmar senha" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold shadow-inner" required />
+                <button disabled={isLoggingIn} className="w-full py-6 bg-emerald-500 text-white rounded-[32px] font-black text-xs uppercase hover:bg-emerald-600 transition-all">Salvar e Acessar</button>
               </form>
             )}
 
             {!mustChangePassword && (
-              <button type="button" onClick={() => storeService.loginWithGoogle()} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50">
+              <button type="button" onClick={() => storeService.loginWithGoogle()} className="w-full py-5 border-2 border-slate-100 rounded-[32px] font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-slate-50 transition-colors">
                 <img src="https://img.icons8.com/color/24/google-logo.png" alt="Google" className="w-5 h-5" />
                 Google SSO
               </button>
             )}
-            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 uppercase underline mt-4">Vitrine Pública</button>
+            <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 uppercase underline mt-4 hover:text-slate-900">Vitrine Pública</button>
         </div>
+
+        {/* Modal de Recuperação de Senha */}
+        {isRecoveryMode && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-6 animate-in fade-in duration-300">
+             <div className="bg-white rounded-[50px] p-12 max-w-sm w-full shadow-2xl space-y-6 text-center animate-in zoom-in-95">
+                <div className="text-4xl">📧</div>
+                <h3 className="text-2xl font-black text-slate-900 uppercase">Recuperar Acesso</h3>
+                <p className="text-slate-500 text-xs font-medium leading-relaxed">Enviaremos um link de recuperação para o seu e-mail cadastrado.</p>
+                <form onSubmit={handleRecover} className="space-y-4">
+                   <input required type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="Seu e-mail de acesso" className="w-full bg-slate-50 border-none rounded-2xl p-6 outline-none font-bold shadow-inner" />
+                   <button disabled={isLoggingIn} className="w-full py-5 bg-emerald-500 text-white rounded-[24px] font-black text-xs uppercase shadow-xl hover:bg-emerald-600 transition-all">{isLoggingIn ? 'ENVIANDO...' : 'Enviar link de recuperação'}</button>
+                   <button type="button" onClick={() => setIsRecoveryMode(false)} className="w-full py-3 text-[10px] font-black text-slate-400 uppercase hover:text-slate-900">Voltar</button>
+                </form>
+             </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -331,8 +326,8 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden relative">
       {feedback && (
-        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[500] animate-in slide-in-from-top-10">
-          <div className={`px-12 py-5 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest ${feedback.type === 'error' ? 'bg-red-900' : 'bg-slate-900'}`}>
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[500] animate-in slide-in-from-top-10 duration-300">
+          <div className={`px-12 py-5 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest ${feedback.type === 'error' ? 'bg-red-900 border-red-500' : 'bg-slate-900'}`}>
             {feedback.message}
           </div>
         </div>
@@ -342,14 +337,14 @@ const App: React.FC = () => {
         <div className="min-h-screen bg-white flex flex-col relative w-full overflow-y-auto custom-scrollbar">
            <PublicHeader onNavigate={handleNavigate} cartCount={cart.length} onOpenCoach={() => setIsCoachOpen(true)} onSwitchMode={() => setViewMode('admin')} user={session} />
            <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-12">
-              {currentRoute === 'public-home' && <PublicHome onNavigate={handleNavigate} onAddToCart={handleAddToCart} />}
+              {currentRoute === 'public-home' && <PublicHome onNavigate={handleNavigate} onAddToCart={p => setCart([...cart, p])} />}
               {currentRoute === 'departments' && <PublicDepartments onNavigate={handleNavigate} />}
-              {currentRoute === 'store-catalog' && <PublicCatalog onBuy={handleAddToCart} />}
-              {currentRoute === 'store-offers' && <PublicCatalog onBuy={handleAddToCart} showOnlyOffers />}
+              {currentRoute === 'store-catalog' && <PublicCatalog onBuy={p => setCart([...cart, p])} />}
+              {currentRoute === 'store-offers' && <PublicCatalog onBuy={p => setCart([...cart, p])} showOnlyOffers />}
               {currentRoute === 'checkout' && <CheckoutPage product={cart.length > 0 ? cart[0] : null} onComplete={() => { setCart([]); handleNavigate('customer-portal'); }} />}
               {currentRoute === 'public-contact' && <PublicContact />}
               {currentRoute === 'affiliate-register' && <PublicAffiliateRegister onComplete={() => handleNavigate('public-home')} />}
-              {currentRoute === 'favorites' && <PublicFavorites user={session} onAddToCart={handleAddToCart} onNavigate={handleNavigate} />}
+              {currentRoute === 'favorites' && <PublicFavorites user={session} onAddToCart={p => setCart([...cart, p])} onNavigate={handleNavigate} />}
               {currentRoute === 'affiliate-portal' && <AffiliatePortal user={session} onNavigate={handleNavigate} />}
               {currentRoute === 'customer-portal' && <CustomerPortal user={session} onNavigate={handleNavigate} />}
            </main>

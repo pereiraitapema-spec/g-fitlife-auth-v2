@@ -62,6 +62,25 @@ export const storeService = {
     return { success: false, error: 'Perfil não encontrado.' };
   },
 
+  /**
+   * RECUPERAÇÃO DE SENHA (FORGOT PASSWORD)
+   */
+  async recoverPassword(email: string) {
+    if (!supabase) return { success: false, error: 'Offline' };
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * ATUALIZAÇÃO DE SENHA (Obrigatório em recuperação ou primeiro acesso)
+   */
   async updatePassword(newPass: string) {
     if (!supabase) return { success: false, error: 'Supabase Offline' };
     try {
@@ -135,13 +154,13 @@ export const storeService = {
     }
   },
 
-  async getProfileAfterLogin(userId: string) {
+  async getProfileAfterLogin(userId: string): Promise<AppUser | null> {
     if (!supabase) return null;
     
     let { data: profile } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
     
     const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return profile;
+    if (!authUser) return profile ? this.normalizeProfile(profile) : null;
 
     const email = authUser.email?.toLowerCase();
     const isMasterEmail = email === MASTER_EMAIL;
@@ -153,12 +172,12 @@ export const storeService = {
           .eq('id', userId)
           .select()
           .single();
-        return updated;
+        return this.normalizeProfile(updated);
       }
-      return profile;
+      return this.normalizeProfile(profile);
     }
 
-    const newProfile = {
+    const newProfileData = {
       id: authUser.id,
       email: email,
       name: authUser.user_metadata?.full_name || (isMasterEmail ? 'Master Admin' : 'Membro G-Fit'),
@@ -169,11 +188,24 @@ export const storeService = {
       created_at: new Date().toISOString()
     };
     
-    const { data: created } = await supabase.from('user_profile').insert(newProfile).select().single();
-    return created;
+    const { data: created } = await supabase.from('user_profile').insert(newProfileData).select().single();
+    return this.normalizeProfile(created);
   },
 
-  createSession(u: any): UserSession {
+  normalizeProfile(p: any): AppUser {
+    return {
+      id: p.id,
+      email: p.email,
+      name: p.name,
+      role: p.role as UserRole,
+      status: p.status as UserStatus,
+      createdAt: p.created_at,
+      isDefaultPassword: p.is_default_password,
+      loginType: p.login_type
+    };
+  },
+
+  createSession(u: AppUser): UserSession {
     const s: UserSession = {
       id: 'SESS-' + Date.now(),
       userId: u.id,
@@ -295,12 +327,22 @@ export const storeService = {
   async getUsers(): Promise<AppUser[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('user_profile').select('*').order('created_at', { ascending: false });
-    return data || [];
+    return (data || []).map(u => this.normalizeProfile(u));
   },
 
   async saveUser(user: AppUser): Promise<void> {
     if (!supabase) return;
-    const { error } = await supabase.from('user_profile').upsert(user);
+    const dbUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      login_type: user.loginType,
+      is_default_password: user.isDefaultPassword,
+      created_at: user.createdAt
+    };
+    const { error } = await supabase.from('user_profile').upsert(dbUser);
     if (error) throw error;
     window.dispatchEvent(new Event('usersChanged'));
   },
@@ -624,7 +666,6 @@ export const storeService = {
       alert('Faça login novamente antes de enviar a imagem');
       throw new Error('Usuário não logado');
     }
-    console.log('Usuário autenticado para upload (storeService):', session.user.id);
 
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -637,12 +678,11 @@ export const storeService = {
     }
     
     const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filePath);
-    console.log('Upload sucesso:', data);
     return publicUrl;
   },
 
   async createAdminUser(adminData: any): Promise<void> {
-    const response = await fetch('/api/admin/create-user', {
+    const response = await fetch('/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(adminData)
@@ -655,15 +695,8 @@ export const storeService = {
   },
 
   async deleteAdminUser(id: string): Promise<boolean> {
-    const response = await fetch('/api/admin/delete-user', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: id })
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Falha ao excluir.');
-    }
+    const { error } = await supabase.from('user_profile').delete().eq('id', id);
+    if (error) throw error;
     window.dispatchEvent(new Event('usersChanged'));
     return true;
   },

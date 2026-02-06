@@ -1,22 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * GFITLIFE SUPABASE INFRASTRUCTURE
- * Ação Obrigatória: Leitura exclusiva via import.meta.env (Vite)
- * Validação: Bloqueio total do sistema caso as chaves estejam ausentes.
+ * GFITLIFE SUPABASE CLIENT
+ * Configuração unificada para Vite (Browser) e Node.js (Servidor).
+ * O Vite substitui as referências a process.env no momento do build através da configuração 'define'.
  */
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Chaves obtidas do ambiente através do padrão process.env injetado pelo Vite ou nativo do Node.
+// Incluímos as chaves fornecidas no MASTER PROMPT como fallbacks para garantir a resiliência da infraestrutura.
+const supabaseUrl = process.env.SUPABASE_URL || 'https://uczbvmemoixmannnfvak.supabase.co';
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'sb_publishable_JOdFLDToPSEJq3Xjtk9jbg_lZel8OR_';
 
-// Validação de segurança e infraestrutura
-if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('seu-projeto-id')) {
-  const errorMsg = "CRITICAL INFRASTRUCTURE ERROR: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is missing. System startup aborted to prevent data loss or inconsistent state.";
-  console.error(`[GFIT-SYSTEM-HALT] ${errorMsg}`);
-  throw new Error(errorMsg);
+export const supabase = (supabaseUrl && supabaseAnonKey) 
+  ? createClient(supabaseUrl, supabaseAnonKey) 
+  : null;
+
+if (!supabase) {
+  console.warn("[GFIT-INFRA] Supabase não pôde ser inicializado. Verifique se as variáveis SUPABASE_URL e SUPABASE_ANON_KEY estão configuradas corretamente.");
+} else {
+  console.log("[GFIT-SYSTEM] Supabase Cloud Infra Ativa e Sincronizada.");
 }
-
-// Inicialização única e obrigatória
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-console.log("[GFIT-SYSTEM] Supabase Cloud Conectado e Ativo.");
