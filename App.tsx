@@ -110,6 +110,7 @@ const App: React.FC = () => {
   const [loginPass, setLoginPass] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [showResend, setShowResend] = useState(false);
 
   const triggerFeedback = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setFeedback({ message, type });
@@ -172,9 +173,11 @@ const App: React.FC = () => {
         console.log('Auth event:', event, 'User:', session?.user?.id || 'null');
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           console.log('Usuário logado ou token renovado');
+          syncAuth(); // Re-sincronizar perfil após confirmação de e-mail
         }
         if (event === 'SIGNED_OUT') {
           console.log('Usuário deslogado');
+          setSession(null);
         }
       });
       authSubscription = subscription;
@@ -197,6 +200,7 @@ const App: React.FC = () => {
     if (isLoggingIn) return;
     setIsLoggingIn(true);
     setAuthError(null);
+    setShowResend(false);
     try {
       const res = await storeService.login(loginEmail, loginPass);
       if (res.success && res.session) {
@@ -205,9 +209,23 @@ const App: React.FC = () => {
         triggerFeedback('Acesso Autorizado!');
       } else {
         setAuthError(res.error || 'Credenciais inválidas');
+        if (res.error?.toLowerCase().includes('confirmado')) {
+          setShowResend(true);
+        }
       }
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleResendEmail = async () => {
+    if (!loginEmail) return;
+    const res = await storeService.resendVerificationEmail(loginEmail);
+    if (res.success) {
+      triggerFeedback('E-mail de confirmação reenviado!');
+      setShowResend(false);
+    } else {
+      triggerFeedback('Falha ao reenviar: ' + res.error, 'error');
     }
   };
 
@@ -246,7 +264,19 @@ const App: React.FC = () => {
           <div className="text-center space-y-6">
             <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl">G</div>
             <h1 className="text-3xl font-black text-slate-900 uppercase">G-Fit Login</h1>
-            {authError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase">{authError}</div>}
+            {authError && (
+              <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase space-y-3">
+                <p>{authError}</p>
+                {showResend && (
+                  <button 
+                    onClick={handleResendEmail}
+                    className="w-full py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all"
+                  >
+                    REENVIAR E-MAIL AGORA
+                  </button>
+                )}
+              </div>
+            )}
             <form onSubmit={handleLogin} className="space-y-4 pt-4 text-left">
                <input disabled={isLoggingIn} type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@gfitlife.io" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />
                <input disabled={isLoggingIn} type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••••" className="w-full bg-slate-50 border-none rounded-3xl p-6 outline-none font-bold" required />

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { storeService } from '../services/storeService';
 import { AppUser, UserRole, UserStatus } from '../types';
@@ -56,7 +55,7 @@ const CoreUsers: React.FC = () => {
       setIsAdminModalOpen(false);
       setAdminFormData({ name: '', email: '', password: '', role: UserRole.ADMIN_MASTER });
       await loadData();
-    } catch (err) {
+    } catch (err: any) {
       showFeedback(err.message, "error");
     } finally {
       setIsSubmitting(false);
@@ -89,6 +88,15 @@ const CoreUsers: React.FC = () => {
       showFeedback("Erro ao salvar: " + (error.message || "Falha na rede"), "error");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResendVerification = async (email: string) => {
+    const res = await storeService.resendVerificationEmail(email);
+    if (res.success) {
+      showFeedback("E-mail de confirmação enviado para: " + email);
+    } else {
+      showFeedback("Erro ao reenviar: " + res.error, "error");
     }
   };
 
@@ -241,6 +249,7 @@ const CoreUsers: React.FC = () => {
                   </td>
                   <td className="px-8 py-6 text-right">
                      <div className="flex justify-end gap-3">
+                        <button onClick={() => handleResendVerification(u.email)} title="Forçar reenvio de e-mail de confirmação" className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 rounded-xl text-emerald-600 font-black text-[10px] uppercase transition-all">Reenviar E-mail</button>
                         <button onClick={() => { setFormData(u); setIsModalOpen(true); }} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-blue-500 font-black text-[10px] uppercase transition-all">Editar</button>
                         <button onClick={() => toggleStatus(u.id)} className="px-4 py-2 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 text-slate-400 font-black text-[10px] uppercase transition-all">Status</button>
                         {u.email !== 'admin@system.local' && (isMaster || u.role !== UserRole.ADMIN_MASTER) && (

@@ -12,6 +12,7 @@ import {
 import { supabase } from '../backend/supabaseClient';
 
 const KEY_SESSION = 'auth_session';
+const MASTER_EMAIL = 'pereira.itapema@gmail.com';
 
 export const storeService = {
   async initializeSystem(): Promise<void> {
@@ -21,12 +22,6 @@ export const storeService = {
 
   // AUTH & SESSION
   async login(email: string, pass: string) {
-    if (email.trim().toLowerCase() === 'admin@system.local' && pass === 'admin123') {
-      const fallbackAdmin = { id: 'master-0', name: 'G-FitLife Master', email: email.toLowerCase(), role: UserRole.ADMIN_MASTER, status: UserStatus.ACTIVE };
-      const session = this.createSession(fallbackAdmin);
-      return { success: true, session, profile: fallbackAdmin, isStaff: true };
-    }
-
     if (!supabase) return { success: false, error: 'Serviço Offline.' };
 
     try {
@@ -52,7 +47,14 @@ export const storeService = {
           }
           const session = this.createSession(profile);
           const isStaff = [UserRole.ADMIN_MASTER, UserRole.ADMIN_OPERATIONAL, UserRole.FINANCE, UserRole.MARKETING].includes(profile.role);
-          return { success: true, session, profile, isStaff };
+          
+          return { 
+            success: true, 
+            session, 
+            profile, 
+            isStaff,
+            mustChangePassword: profile.isDefaultPassword || false 
+          };
         }
       }
     } catch (err) {
@@ -69,14 +71,16 @@ export const storeService = {
     if (!supabase) return { success: false, error: 'Serviço de autenticação offline.' };
 
     try {
+      const isMasterRequest = email.trim().toLowerCase() === MASTER_EMAIL;
+      
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password: pass,
         options: {
           data: {
             full_name: name,
+            is_master: isMasterRequest
           },
-          // O e-mail de confirmação é disparado pelo Supabase se habilitado no dashboard
           emailRedirectTo: window.location.origin
         }
       });
@@ -95,7 +99,6 @@ export const storeService = {
 
   /**
    * REENVIAR E-MAIL DE VERIFICAÇÃO
-   * Permite que usuários existentes recebam novamente o link de confirmação.
    */
   async resendVerificationEmail(email: string) {
     if (!supabase) return { success: false, error: 'Supabase Offline' };
@@ -126,24 +129,44 @@ export const storeService = {
 
   async getProfileAfterLogin(userId: string) {
     if (!supabase) return null;
-    const { data: profile } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
-    if (profile) return profile;
-
+    
+    // Busca perfil atual
+    let { data: profile } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
+    
+    // Obtém dados do Auth User para verificação de email master
     const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (authUser) {
-      const newProfile = {
-        id: authUser.id,
-        email: authUser.email?.toLowerCase(),
-        name: authUser.user_metadata?.full_name || 'Membro G-Fit',
-        role: UserRole.CUSTOMER,
-        status: UserStatus.ACTIVE,
-        login_type: 'hybrid',
-        created_at: new Date().toISOString()
-      };
-      const { data: created } = await supabase.from('user_profile').insert(newProfile).select().single();
-      return created;
+    if (!authUser) return profile;
+
+    const email = authUser.email?.toLowerCase();
+    const isMasterEmail = email === MASTER_EMAIL;
+
+    // Se perfil existe, garante que o email master seja sempre ADMIN_MASTER
+    if (profile) {
+      if (isMasterEmail && profile.role !== UserRole.ADMIN_MASTER) {
+        const { data: updated } = await supabase.from('user_profile')
+          .update({ role: UserRole.ADMIN_MASTER })
+          .eq('id', userId)
+          .select()
+          .single();
+        return updated;
+      }
+      return profile;
     }
-    return null;
+
+    // Criar perfil se não existir (Primeiro Login)
+    const newProfile = {
+      id: authUser.id,
+      email: email,
+      name: authUser.user_metadata?.full_name || (isMasterEmail ? 'Master Admin' : 'Membro G-Fit'),
+      role: isMasterEmail ? UserRole.ADMIN_MASTER : UserRole.CUSTOMER,
+      status: UserStatus.ACTIVE,
+      login_type: 'hybrid',
+      is_default_password: true, // Flag para exigir troca de senha no primeiro acesso por email
+      created_at: new Date().toISOString()
+    };
+    
+    const { data: created } = await supabase.from('user_profile').insert(newProfile).select().single();
+    return created;
   },
 
   createSession(u: any): UserSession {
@@ -341,7 +364,7 @@ export const storeService = {
   },
   async approveAffiliate(userId: string): Promise<void> {
     if (!supabase) return;
-    await supabase.from('user_profile').update({ role: UserRole.AFFILIATE }).eq('id', userId);
+    await supabase.from('user_profile').update({ role: UserRole.ADMIN_MASTER }).eq('id', userId);
     await supabase.from('affiliates').update({ status: 'active' }).eq('userId', userId);
     window.dispatchEvent(new Event('usersChanged'));
   },

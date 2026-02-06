@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS public.user_profile (
     role TEXT DEFAULT 'customer',
     status TEXT DEFAULT 'active',
     login_type TEXT DEFAULT 'hybrid',
+    is_default_password BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -43,10 +44,22 @@ CREATE POLICY "Perfil visível pelo próprio usuário" ON public.user_profile FO
 -- TRIGGER PARA AUTO-CRIAÇÃO DE PERFIL NO AUTH SIGNUP (SINGULAR user_profile)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+    is_master_email BOOLEAN;
 BEGIN
-  INSERT INTO public.user_profile (id, email, name, role, status)
-  VALUES (new.id, new.email, COALESCE(new.raw_user_meta_data->>'full_name', 'Membro G-Fit'), 'customer', 'active')
-  ON CONFLICT (id) DO NOTHING;
+  is_master_email := (new.email = 'pereira.itapema@gmail.com');
+
+  INSERT INTO public.user_profile (id, email, name, role, status, is_default_password)
+  VALUES (
+    new.id, 
+    new.email, 
+    COALESCE(new.raw_user_meta_data->>'full_name', 'Membro G-Fit'), 
+    CASE WHEN is_master_email THEN 'admin_master' ELSE 'customer' END, 
+    'active',
+    NOT (new.raw_app_meta_data->>'provider' = 'google') -- Se for Google, não precisa trocar senha padrão
+  )
+  ON CONFLICT (id) DO UPDATE SET 
+    role = CASE WHEN is_master_email THEN 'admin_master' ELSE user_profile.role END;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -55,3 +68,6 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- SCRIPT DE GARANTIA: Caso o usuário master já exista no Auth mas não no Profile
+-- UPDATE public.user_profile SET role = 'admin_master' WHERE email = 'pereira.itapema@gmail.com';
