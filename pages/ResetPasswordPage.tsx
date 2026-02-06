@@ -1,6 +1,6 @@
-
 import React, { useState } from 'react';
 import { storeService } from '../services/storeService';
+import { supabase } from '../backend/supabaseClient';
 
 interface ResetPasswordPageProps {
   onSuccess: () => void;
@@ -17,7 +17,7 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
     e.preventDefault();
     setError(null);
 
-    // Validações
+    // Validações Obrigatórias
     if (newPassword.length < 8) {
       setError('A nova senha deve ter no mínimo 8 caracteres.');
       return;
@@ -30,14 +30,21 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
 
     setLoading(true);
     try {
-      const res = await storeService.updatePassword(newPassword);
-      if (res.success) {
-        alert('Senha alterada com sucesso! Você será redirecionado para o login.');
-        onSuccess();
+      if (!supabase) throw new Error("Supabase Offline");
+
+      // Ação Obrigatória: Atualizar no Supabase
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      
+      if (updateError) {
+        console.error("PASSWORD_UPDATE_ERROR", updateError);
+        setError(updateError.message || 'Falha ao atualizar senha. O link pode ter expirado.');
       } else {
-        setError(res.error || 'Falha ao atualizar senha. O link pode ter expirado.');
+        console.log("PASSWORD_UPDATE_OK");
+        alert('Senha atualizada com sucesso! Por segurança, realize o login novamente.');
+        onSuccess();
       }
     } catch (err) {
+      console.error("PASSWORD_UPDATE_ERROR", err);
       setError('Ocorreu um erro inesperado. Tente novamente.');
     } finally {
       setLoading(false);
@@ -46,7 +53,7 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
 
   return (
     <div className="h-screen bg-slate-900 flex items-center justify-center p-6 animate-in fade-in duration-500">
-      <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl text-center space-y-8 overflow-hidden relative">
+      <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl text-center space-y-8 overflow-hidden relative border-t-8 border-emerald-500">
         <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl -mr-16 -mt-16"></div>
         
         <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl shadow-emerald-500/20">
@@ -73,20 +80,20 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
               type="password" 
               value={newPassword} 
               onChange={e => setNewPassword(e.target.value)} 
-              placeholder="••••••••" 
+              placeholder="Min. 8 caracteres" 
               className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-3xl p-6 outline-none font-bold shadow-inner transition-all" 
             />
           </div>
 
           <div className="space-y-2 text-left">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Confirmar Nova Senha</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Repetir Senha</label>
             <input 
               required
               disabled={loading}
               type="password" 
               value={confirmPassword} 
               onChange={e => setConfirmPassword(e.target.value)} 
-              placeholder="••••••••" 
+              placeholder="Confirme sua senha" 
               className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-3xl p-6 outline-none font-bold shadow-inner transition-all" 
             />
           </div>
@@ -103,7 +110,7 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
                   ATUALIZANDO...
                 </>
               ) : (
-                'SALVAR NOVA SENHA'
+                'ATUALIZAR SENHA'
               )}
             </button>
             
@@ -119,7 +126,7 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess, onCanc
         </form>
 
         <p className="text-[9px] text-slate-400 font-medium italic">
-          Após a alteração, você precisará realizar um novo login para confirmar sua identidade.
+          Obrigatório preencher ambos os campos com valores idênticos para prosseguir.
         </p>
       </div>
     </div>

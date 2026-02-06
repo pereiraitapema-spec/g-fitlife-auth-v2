@@ -61,7 +61,7 @@ DECLARE
     is_master_email BOOLEAN;
     is_google_auth BOOLEAN;
 BEGIN
-  is_master_email := (new.email = 'pereira.itapema@gmail.com');
+  is_master_email := (new.email = 'master@gfitlife.com' OR new.email = 'pereira.itapema@gmail.com');
   is_google_auth := (new.raw_app_meta_data->>'provider' = 'google');
 
   INSERT INTO public.user_profile (id, email, name, role, status, is_default_password)
@@ -84,3 +84,7 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- SEED MASTER OBRIGATÓRIO (Exemplo manual se não existir via trigger)
+-- INSERT INTO auth.users (id, email, raw_user_meta_data) 
+-- VALUES (gen_random_uuid(), 'master@gfitlife.com', '{"full_name": "Admin Master"}');

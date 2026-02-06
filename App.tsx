@@ -226,15 +226,14 @@ const App: React.FC = () => {
   };
 
   /**
-   * FLUXO PROFISSIONAL DE RECUPERAÇÃO DE SENHA (MAGIC LINK)
-   * Redireciona o usuário autenticado diretamente para a redefinição.
+   * FLUXO PROFISSIONAL DE RECUPERAÇÃO DE ACESSO (MAGIC LINK)
+   * Envia link de acesso direto que obriga o usuário a redefinir a senha no destino.
    */
   const handleRecover = async (e?: React.FormEvent | React.MouseEvent) => {
-    console.log("RECOVER_CLICK_OK");
     if (e) e.preventDefault();
     
     if (!loginEmail || !loginEmail.includes('@')) {
-      triggerFeedback('E-mail inválido.', 'error');
+      triggerFeedback('Por favor, informe um e-mail válido.', 'error');
       return;
     }
 
@@ -244,7 +243,7 @@ const App: React.FC = () => {
     try {
       if (!supabase) throw new Error("Serviço Auth indisponível.");
       
-      // FLUXO VIA OTP/MAGIC LINK PARA RESET SEGURO
+      // DISPARO DE MAGIC LINK CONFORME REQUISITO PROFISSIONAL
       const { error } = await supabase.auth.signInWithOtp({
         email: loginEmail.trim().toLowerCase(),
         options: {
@@ -254,10 +253,11 @@ const App: React.FC = () => {
       
       if (error) throw error;
 
+      console.log("MAGICLINK_SENT_OK");
       triggerFeedback('Link de recuperação enviado. Verifique seu email.', 'success');
       setIsRecoveryMode(false);
     } catch (err: any) {
-      console.error('[GFIT-AUTH] Erro no disparo do Magic Link:', err);
+      console.error('[GFIT-AUTH] Erro no envio do Magic Link:', err);
       triggerFeedback('Erro ao enviar link de recuperação', 'error');
     } finally {
       setIsLoggingIn(false);
@@ -330,17 +330,16 @@ const App: React.FC = () => {
         {/* Modal de Recuperação de Senha */}
         {isRecoveryMode && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-6 animate-in fade-in duration-300">
-             <div className="bg-white rounded-[50px] p-12 max-sm w-full shadow-2xl space-y-6 text-center animate-in zoom-in-95">
+             <div className="bg-white rounded-[50px] p-12 max-w-sm w-full shadow-2xl space-y-6 text-center animate-in zoom-in-95">
                 <div className="text-4xl">📧</div>
                 <h3 className="text-2xl font-black text-slate-900 uppercase">Recuperar Acesso</h3>
-                <p className="text-slate-500 text-xs font-medium leading-relaxed">Enviaremos um link de recuperação para o seu e-mail cadastrado.</p>
-                <form onSubmit={(e) => handleRecover(e)} className="space-y-4">
+                <p className="text-slate-500 text-xs font-medium leading-relaxed">Enviaremos um link de acesso direto (Magic Link) para o seu e-mail cadastrado.</p>
+                <form onSubmit={handleRecover} className="space-y-4">
                    <input required type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="Seu e-mail de acesso" className="w-full bg-slate-50 border-none rounded-2xl p-6 outline-none font-bold shadow-inner" />
                    <button 
                      type="submit"
-                     onClick={(e) => handleRecover(e)}
                      disabled={isLoggingIn} 
-                     className="w-full py-5 bg-emerald-500 text-white rounded-[24px] font-black text-xs uppercase shadow-xl hover:bg-emerald-600 transition-all"
+                     className="w-full py-5 bg-emerald-500 text-white rounded-[24px] font-black text-xs uppercase shadow-xl hover:bg-emerald-600 transition-all active:scale-95"
                    >
                      {isLoggingIn ? 'ENVIANDO...' : 'Enviar link de recuperação'}
                    </button>
