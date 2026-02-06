@@ -55,31 +55,31 @@ CREATE POLICY "Afiliados podem ver seus links" ON public.tracking_links FOR SELE
 CREATE POLICY "Adição de links livre para admin" ON public.tracking_links FOR ALL USING (true);
 
 -- 4. CONFIGURAÇÃO DE STORAGE (uploads)
--- Certifique-se de criar o bucket 'uploads' no painel antes de aplicar
--- Policy para INSERT: Permitir apenas usuários autenticados
+-- Garante que o bucket existe (Executar no SQL Editor do Supabase)
+-- INSERT INTO storage.buckets (id, name, public) VALUES ('uploads', 'uploads', true) ON CONFLICT (id) DO NOTHING;
+
+-- Policy para INSERT: Apenas usuários autenticados (auth.uid() IS NOT NULL)
 DO $$ 
 BEGIN
-    IF EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'uploads') THEN
-        INSERT INTO storage.policies (name, color, definition, check, operation, bucket_id)
-        VALUES ('Permitir upload para autenticados', 'emerald', null, '(auth.uid() IS NOT NULL)', 'INSERT', 'uploads')
-        ON CONFLICT (name) DO NOTHING;
-        
-        INSERT INTO storage.policies (name, color, definition, check, operation, bucket_id)
-        VALUES ('Acesso público para leitura', 'blue', '(bucket_id = ''uploads'')', null, 'SELECT', 'uploads')
-        ON CONFLICT (name) DO NOTHING;
-    END IF;
+    -- Remover antigas para evitar duplicidade
+    DELETE FROM storage.policies WHERE name = 'Permitir upload para autenticados';
+    DELETE FROM storage.policies WHERE name = 'Acesso público para leitura';
+    
+    INSERT INTO storage.policies (name, color, definition, check, operation, bucket_id)
+    VALUES ('Permitir upload para autenticados', 'emerald', null, '(auth.uid() IS NOT NULL)', 'INSERT', 'uploads');
+    
+    INSERT INTO storage.policies (name, color, definition, check, operation, bucket_id)
+    VALUES ('Acesso público para leitura', 'blue', '(bucket_id = ''uploads'')', null, 'SELECT', 'uploads');
 END $$;
 
--- TRIGGER PARA AUTO-CRIAÇÃO DE PERFIL NO AUTH SIGNUP (SINGULAR user_profile)
--- CORREÇÃO: ON CONFLICT (email) para evitar erro 500 se o perfil já existir sem ID de auth
+-- 5. TRIGGER PARA AUTO-CRIAÇÃO DE PERFIL NO AUTH SIGNUP
+-- CORREÇÃO PARA ERRO 500: Usar ON CONFLICT(email) para assumir perfis pré-existentes e SECURITY DEFINER
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
     is_master_email BOOLEAN;
-    is_google_auth BOOLEAN;
 BEGIN
   is_master_email := (new.email IN ('master@gfitlife.com', 'pereira.itapema@gmail.com'));
-  is_google_auth := (new.raw_app_meta_data->>'provider' = 'google');
 
   INSERT INTO public.user_profile (id, email, name, role, status, is_default_password)
   VALUES (
@@ -88,10 +88,10 @@ BEGIN
     COALESCE(new.raw_user_meta_data->>'full_name', 'Membro G-Fit'), 
     CASE WHEN is_master_email THEN 'admin_master' ELSE 'customer' END, 
     'active',
-    CASE WHEN is_google_auth THEN FALSE ELSE TRUE END 
+    CASE WHEN (new.raw_app_meta_data->>'provider' = 'google') THEN FALSE ELSE TRUE END 
   )
   ON CONFLICT (email) DO UPDATE SET 
-    id = EXCLUDED.id, -- Sincroniza o ID do Auth com o perfil pre-existente
+    id = EXCLUDED.id, -- Sincroniza o ID do Auth com o perfil pre-existente (Fundamental para evitar erro 500)
     name = COALESCE(EXCLUDED.name, user_profile.name),
     role = CASE WHEN is_master_email THEN 'admin_master' ELSE user_profile.role END,
     is_default_password = EXCLUDED.is_default_password;
@@ -100,13 +100,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Reiniciar Trigger
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- SEED MASTER INICIAL (Garante o registro base)
--- Em produção, o ID real virá do auth.users via trigger corrigida acima
-INSERT INTO public.user_profile (id, email, name, role, status)
-VALUES ('00000000-0000-0000-0000-000000000000', 'master@gfitlife.com', 'Admin Master', 'admin_master', 'active')
-ON CONFLICT (email) DO NOTHING;
+-- Garantir permissões de acesso para o usuário de auth do Supabase
+GRANT ALL ON public.user_profile TO postgres, service_role;

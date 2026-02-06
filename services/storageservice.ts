@@ -3,23 +3,24 @@ import { supabase } from '../backend/supabaseClient';
 /**
  * SERVIÇO DE STORAGE G-FITLIFE
  * Padroniza o envio de mídia para o bucket corporativo 'uploads'.
- * Segue a regra de segurança: auth.uid() IS NOT NULL.
+ * Regra de Segurança: Requer sessão ativa (auth.uid() IS NOT NULL).
  */
 
 export const storageService = {
   async upload(file: File, folder: string = 'public'): Promise<string> {
     if (!supabase) {
-      console.error("[GFIT-STORAGE] Erro: Cliente Supabase não inicializado.");
-      throw new Error('Sistema de armazenamento offline.');
+      console.error("[GFIT-STORAGE] Supabase não inicializado.");
+      throw new Error('Sistema de arquivos offline.');
     }
 
-    // 1. Validação Obrigatória de Sessão (RLS Client Side)
+    // 1. Validação de Sessão Obrigatória para cumprir RLS
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
     if (!session || !session.user || sessionError) {
-      console.error('[GFIT-STORAGE] Tentativa de upload sem autenticação.');
-      alert('Sua sessão expirou ou você não está logado. O upload é permitido apenas para usuários autenticados.');
-      throw new Error('Usuário não autenticado');
+      const msg = 'Sua sessão expirou ou você não está logado. Upload negado.';
+      console.warn('[GFIT-STORAGE]', msg);
+      alert(msg);
+      throw new Error('Não autorizado');
     }
 
     // 2. Preparação do arquivo
@@ -27,9 +28,9 @@ export const storageService = {
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `${folder}/${fileName}`;
 
-    console.log(`[STORAGE] Uploading: uploads/${filePath} | User: ${session.user.id}`);
+    console.log(`[STORAGE] Iniciando upload: uploads/${filePath} (User: ${session.user.id})`);
 
-    // 3. Executar Upload
+    // 3. Executar Upload no bucket 'uploads'
     const { data, error: uploadError } = await supabase.storage
       .from('uploads')
       .upload(filePath, file, {
@@ -38,15 +39,20 @@ export const storageService = {
       });
 
     if (uploadError) {
-      console.error('[STORAGE-ERROR]', uploadError);
-      // Erro comum: Bucket não existe ou RLS barrou
-      if (uploadError.message.includes('not found')) {
-        throw new Error('Bucket "uploads" não encontrado. Crie-o no painel do Supabase como público.');
+      console.error('[GFIT-STORAGE-ERROR]', uploadError);
+      
+      // Tratamento de erros comuns
+      if (uploadError.message.includes('bucket not found')) {
+        throw new Error('O bucket "uploads" não foi encontrado no Supabase. Crie-o como público.');
       }
-      throw new Error(`Falha no servidor de arquivos: ${uploadError.message}`);
+      if (uploadError.message.includes('row-level security')) {
+        throw new Error('Permissão negada pela política RLS do storage.');
+      }
+      
+      throw new Error(`Erro no servidor de arquivos: ${uploadError.message}`);
     }
 
-    // 4. Retornar URL Pública
+    // 4. Gerar e retornar URL pública
     const { data: { publicUrl } } = supabase.storage
       .from('uploads')
       .getPublicUrl(filePath);
