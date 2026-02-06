@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import HeaderSimple from './components/HeaderSimple';
@@ -226,16 +225,19 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * CORREÇÃO: Função de recuperação de senha disparando email oficial
+   */
   const handleRecover = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoggingIn(true);
     const res = await storeService.recoverPassword(loginEmail);
     setIsLoggingIn(false);
     if (res.success) {
-      triggerFeedback('Email de recuperação enviado. Verifique sua caixa de entrada.');
+      triggerFeedback('Email de redefinição enviado. Verifique sua caixa de entrada.');
       setIsRecoveryMode(false);
     } else {
-      triggerFeedback('Não foi possível enviar o email. Verifique o endereço informado.', 'error');
+      triggerFeedback(res.error || 'Não foi possível enviar o email de redefinição.', 'error');
     }
   };
 

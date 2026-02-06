@@ -64,12 +64,13 @@ export const storeService = {
 
   /**
    * RECUPERAÇÃO DE SENHA (FORGOT PASSWORD)
+   * CORREÇÃO: Redirecionamento para a URL de produção /reset-password
    */
   async recoverPassword(email: string) {
     if (!supabase) return { success: false, error: 'Offline' };
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo: window.location.origin,
+        redirectTo: 'https://g-fitlife-auth-v2-production.up.railway.app/reset-password',
       });
       if (error) throw error;
       return { success: true };
