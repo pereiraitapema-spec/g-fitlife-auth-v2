@@ -52,7 +52,7 @@ export const storeService = {
             session, 
             profile, 
             isStaff,
-            mustChangePassword: profile.is_default_password || false 
+            mustChangePassword: profile.isDefaultPassword || false 
           };
         }
       }
@@ -62,9 +62,6 @@ export const storeService = {
     return { success: false, error: 'Perfil não encontrado.' };
   },
 
-  /**
-   * ATUALIZAÇÃO DE SENHA (Obrigatório no primeiro acesso)
-   */
   async updatePassword(newPass: string) {
     if (!supabase) return { success: false, error: 'Supabase Offline' };
     try {
@@ -81,9 +78,6 @@ export const storeService = {
     }
   },
 
-  /**
-   * REGISTRO DE USUÁRIO (Fluxo de E-mail)
-   */
   async register(email: string, pass: string, name: string) {
     if (!supabase) return { success: false, error: 'Serviço de autenticação offline.' };
 
@@ -204,6 +198,34 @@ export const storeService = {
     sessionStorage.removeItem(KEY_SESSION);
     if (supabase) supabase.auth.signOut();
     window.dispatchEvent(new Event('sessionUpdated'));
+  },
+
+  // AFFILIATE TRACKING LINKS
+  async generateTrackingLink(affiliateId: string, productId: string) {
+    if (!supabase) return { success: false, error: 'Offline' };
+    try {
+      const slug = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const { data, error } = await supabase.from('tracking_links').insert({
+        affiliate_id: affiliateId,
+        product_id: productId,
+        slug: slug,
+        visits: 0
+      }).select().single();
+
+      if (error) throw error;
+      return { success: true, link: data };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async getTrackingLinks(affiliateId: string) {
+    if (!supabase) return [];
+    const { data } = await supabase.from('tracking_links')
+      .select('*, products(name)')
+      .eq('affiliate_id', affiliateId)
+      .order('created_at', { ascending: false });
+    return data || [];
   },
 
   // CORE DATA

@@ -33,13 +33,26 @@ CREATE TABLE IF NOT EXISTS public.core_settings (
     currency TEXT DEFAULT 'BRL'
 );
 
+-- 3. Tracking de Links de Afiliados
+CREATE TABLE IF NOT EXISTS public.tracking_links (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    affiliate_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    visits INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ATIVAÇÃO DE RLS (SEGURANÇA)
 ALTER TABLE public.user_profile ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.core_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tracking_links ENABLE ROW LEVEL SECURITY;
 
 -- POLICIES BÁSICAS
 CREATE POLICY "Leitura pública de settings" ON public.core_settings FOR SELECT USING (true);
 CREATE POLICY "Perfil visível pelo próprio usuário" ON public.user_profile FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Afiliados podem ver seus links" ON public.tracking_links FOR SELECT USING (true);
+CREATE POLICY "Adição de links livre para admin" ON public.tracking_links FOR ALL USING (true);
 
 -- TRIGGER PARA AUTO-CRIAÇÃO DE PERFIL NO AUTH SIGNUP (SINGULAR user_profile)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -58,7 +71,7 @@ BEGIN
     COALESCE(new.raw_user_meta_data->>'full_name', 'Membro G-Fit'), 
     CASE WHEN is_master_email THEN 'admin_master' ELSE 'customer' END, 
     'active',
-    CASE WHEN is_google_auth THEN FALSE ELSE is_master_email END -- Exige troca de senha apenas para o master via email/senha inicial
+    CASE WHEN is_google_auth THEN FALSE ELSE is_master_email END 
   )
   ON CONFLICT (id) DO UPDATE SET 
     role = CASE WHEN is_master_email THEN 'admin_master' ELSE user_profile.role END,
@@ -71,6 +84,3 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
-
--- SCRIPT DE GARANTIA: Caso o usuário master já exista no Auth mas não no Profile
--- UPDATE public.user_profile SET role = 'admin_master' WHERE email = 'pereira.itapema@gmail.com';
