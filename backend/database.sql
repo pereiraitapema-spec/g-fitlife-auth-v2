@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS public.user_profile (
     status TEXT DEFAULT 'active',
     login_type TEXT DEFAULT 'hybrid',
     is_default_password BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 2. Configurações Globais
@@ -54,49 +55,54 @@ CREATE POLICY "Perfil visível pelo próprio usuário" ON public.user_profile FO
 CREATE POLICY "Afiliados podem ver seus links" ON public.tracking_links FOR SELECT USING (true);
 CREATE POLICY "Adição de links livre para admin" ON public.tracking_links FOR ALL USING (true);
 
--- 4. TRIGGER DEFINITIVA PARA AUTO-CRIAÇÃO E RECUPERAÇÃO DE ACESSO MASTER
--- CORREÇÃO: Usa coluna 'name' (correto) em vez de 'full_name' (errado).
--- CORREÇÃO: Promove automaticamente o dono do sistema a admin_master.
+-- 4. TRIGGER DEFINITIVA CORRIGIDA
+-- Resolve o erro 500 ao usar os nomes de colunas corretos (name em vez de full_name)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS trigger AS $$
 BEGIN
-  -- 1. Tentar atualizar um perfil existente que tenha o mesmo e-mail mas ID diferente
-  -- IMPORTANTE: Se o e-mail for o seu, garantimos que o cargo seja admin_master
+  -- Definir schema
+  SET search_path = public;
+
+  -- Tentar atualizar perfil existente pelo e-mail (captura o ID se o usuário já existir por lead/checkout)
   UPDATE public.user_profile
   SET id = NEW.id,
-      name = COALESCE(NEW.raw_user_meta_data->>'full_name', name, 'Membro G-Fit'),
+      name = COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', name, 'Membro G-Fit'),
+      email = NEW.email,
+      updated_at = now(),
       role = CASE 
         WHEN (NEW.email IN ('master@gfitlife.com', 'pereira.itapema@gmail.com')) THEN 'admin_master' 
         ELSE role 
       END
   WHERE email = NEW.email;
 
-  -- 2. Se nenhum perfil foi atualizado (usuário novo), insere um novo
+  -- Se nenhum registro foi atualizado, inserir novo
   IF NOT FOUND THEN
-    INSERT INTO public.user_profile (id, email, name, role, status, is_default_password)
+    INSERT INTO public.user_profile (id, email, name, role, status, is_default_password, created_at, updated_at)
     VALUES (
-      NEW.id, 
-      NEW.email, 
-      COALESCE(NEW.raw_user_meta_data->>'full_name', 'Membro G-Fit'), 
+      NEW.id,
+      NEW.email,
+      COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', 'Membro G-Fit'),
       CASE 
         WHEN (NEW.email IN ('master@gfitlife.com', 'pereira.itapema@gmail.com')) THEN 'admin_master' 
         ELSE 'customer' 
-      END, 
+      END,
       'active',
-      FALSE
+      FALSE,
+      now(),
+      now()
     );
   END IF;
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Reiniciar Trigger
+-- 2️⃣ Criar trigger no auth.users
 DROP TRIGGER IF EXISTS sync_user_profile ON auth.users;
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+CREATE TRIGGER sync_user_profile
+AFTER INSERT ON auth.users
+FOR EACH ROW
+EXECUTE FUNCTION public.handle_new_user();
 
 -- Garantir que o bucket uploads seja acessível
 DO $$ 
