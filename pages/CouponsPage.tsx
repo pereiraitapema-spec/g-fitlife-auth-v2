@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Coupon, CouponType } from '../types';
 import { storeService } from '../services/storeService';
@@ -31,7 +30,9 @@ const CouponsPage: React.FC = () => {
     try {
       const newCoupon: Coupon = {
         ...formData,
-        id: 'c-' + Date.now(),
+        // CORREÇÃO: Usar ID puramente numérico (string de números) para garantir compatibilidade
+        // caso o campo no banco de dados seja do tipo BIGINT/numeric.
+        id: Date.now().toString(),
       };
       await storeService.saveCoupon(newCoupon);
       await loadData();

@@ -1,4 +1,3 @@
-
 import { 
   Order, Lead, Product, Coupon, OrderStatus, 
   AppUser, SystemSettings, UserRole, UserStatus, 
@@ -242,6 +241,7 @@ export const storeService = {
           whatsapp: data.whatsapp, dominio: data.dominio, moeda: data.moeda, timezone: data.timezone,
           companyName: data.company_name, storeName: data.store_name, adminEmail: data.admin_email,
           systemStatus: data.system_status, environment: data.environment, privacyPolicy: data.privacy_policy,
+          // Fixed terms_of_use to termsOfUse to match interface SystemSettings
           termsOfUse: data.terms_of_use || data.termsOfUse, pwaInstalledCount: 0, pwaVersion: data.pwa_version,
           pushNotificationsActive: true, language: data.language, currency: data.currency
       } as SystemSettings;
@@ -435,11 +435,34 @@ export const storeService = {
   async getCoupons(): Promise<Coupon[]> { 
     if (!supabase) return [];
     const { data } = await supabase.from('coupons').select('*');
-    return data || [];
+    return (data || []).map(c => ({
+      id: c.id,
+      code: c.code,
+      type: c.type,
+      value: c.value,
+      status: c.status
+    }));
   },
   async saveCoupon(c: Coupon): Promise<void> { 
     if (!supabase) return;
-    await supabase.from('coupons').upsert(c);
+    
+    // CORREÇÃO: Mapeamento explícito para evitar erro 400 (Bad Request) no Supabase.
+    // Garante que apenas colunas conhecidas sejam enviadas no payload.
+    const dbData = {
+      id: c.id,
+      code: c.code,
+      type: c.type,
+      value: c.value,
+      status: c.status
+    };
+
+    const { error } = await supabase.from('coupons').upsert(dbData);
+    
+    if (error) {
+      console.error("[GFIT-DB-ERROR] Falha ao persistir cupom:", error);
+      throw error;
+    }
+    
     window.dispatchEvent(new Event('couponsChanged'));
   },
   async getAffiliates(): Promise<Affiliate[]> {
