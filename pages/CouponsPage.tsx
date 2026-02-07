@@ -30,9 +30,8 @@ const CouponsPage: React.FC = () => {
     try {
       const newCoupon: Coupon = {
         ...formData,
-        // CORREÇÃO: Usar ID puramente numérico (string de números) para garantir compatibilidade
-        // caso o campo no banco de dados seja do tipo BIGINT/numeric.
-        id: Date.now().toString(),
+        // CORREÇÃO: Usar UUID real. O erro 22P02 indica que o banco exige UUID.
+        id: crypto.randomUUID(),
       };
       await storeService.saveCoupon(newCoupon);
       await loadData();
@@ -123,7 +122,18 @@ const CouponsPage: React.FC = () => {
                   <option value={CouponType.PERCENTAGE}>%</option>
                   <option value={CouponType.FIXED}>R$</option>
                 </select>
-                <input required disabled={isSubmitting} type="number" step="0.01" value={formData.value} onChange={e => setFormData({...formData, value: parseFloat(e.target.value)})} className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none shadow-inner" />
+                <input 
+                  required 
+                  disabled={isSubmitting} 
+                  type="number" 
+                  step="0.01" 
+                  value={isNaN(formData.value) ? '' : formData.value} 
+                  onChange={e => {
+                    const val = parseFloat(e.target.value);
+                    setFormData({...formData, value: isNaN(val) ? 0 : val});
+                  }} 
+                  className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none shadow-inner" 
+                />
               </div>
               <div className="flex gap-4 pt-4">
                 <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs disabled:opacity-50">

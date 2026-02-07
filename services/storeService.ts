@@ -446,7 +446,6 @@ export const storeService = {
   async saveCoupon(c: Coupon): Promise<void> { 
     if (!supabase) return;
     
-    // Mapeamento inicial completo
     const dbData: any = {
       id: c.id,
       code: c.code,
@@ -455,19 +454,16 @@ export const storeService = {
       status: c.status
     };
 
-    // Tenta primeiro com o mapeamento completo
     let result = await supabase.from('coupons').insert(dbData);
     let error = result.error;
     
-    // CORREÇÃO DINÂMICA PARA PGRST204: Se o erro persistir, remover a coluna citada na mensagem
-    // O console mostrou erro tanto para 'status' quanto para 'value' em tentativas sucessivas.
     let maxRetries = 2;
     while (error && error.code === 'PGRST204' && maxRetries > 0) {
       const missingColumnMatch = error.message.match(/'([^']+)'/);
       const colName = missingColumnMatch ? missingColumnMatch[1] : null;
 
-      if (colName && dbData[colName] !== undefined) {
-        console.warn(`[GFIT-SERVICE] Coluna '${colName}' não encontrada no cache do schema. Removendo da requisição...`);
+      if (colName && dbData[colName] !== undefined && colName !== 'id' && colName !== 'code') {
+        console.warn(`[GFIT-SERVICE] Coluna '${colName}' ausente no cache. Retentando sem ela...`);
         delete dbData[colName];
         const retryResult = await supabase.from('coupons').insert(dbData);
         error = retryResult.error;
@@ -477,15 +473,11 @@ export const storeService = {
       maxRetries--;
     }
     
-    // Se o insert falhar por duplicidade de chave primária após as limpezas de cache, tentamos o update
     if (error && (error.code === '23505' || error.message.includes('already exists'))) {
       const { error: updateError } = await supabase.from('coupons').update(dbData).eq('id', c.id);
-      if (updateError) {
-        console.error("[GFIT-DB-ERROR] Falha ao atualizar cupom:", updateError);
-        throw updateError;
-      }
+      if (updateError) throw updateError;
     } else if (error) {
-      console.error("[GFIT-DB-ERROR] Falha fatal ao persistir cupom:", error);
+      console.error("[GFIT-DB-ERROR] Falha ao persistir cupom:", error);
       throw error;
     }
     
