@@ -50,12 +50,26 @@ ALTER TABLE public.core_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tracking_links ENABLE ROW LEVEL SECURITY;
 
 -- POLICIES BÁSICAS (Com limpeza prévia para evitar erro 42710)
+
+-- Configurações: Leitura pública, Escrita apenas para Admins
 DROP POLICY IF EXISTS "Leitura pública de settings" ON public.core_settings;
 CREATE POLICY "Leitura pública de settings" ON public.core_settings FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Admins podem gerir settings" ON public.core_settings;
+CREATE POLICY "Admins podem gerir settings" ON public.core_settings 
+FOR ALL TO authenticated 
+USING (EXISTS (SELECT 1 FROM public.user_profile WHERE id = auth.uid() AND role = 'admin_master'));
+
+-- Perfis: Usuário vê o próprio, Admin vê e edita todos
 DROP POLICY IF EXISTS "Perfil visível pelo próprio usuário" ON public.user_profile;
 CREATE POLICY "Perfil visível pelo próprio usuário" ON public.user_profile FOR SELECT USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Admins gerem todos os perfis" ON public.user_profile;
+CREATE POLICY "Admins gerem todos os perfis" ON public.user_profile 
+FOR ALL TO authenticated 
+USING (EXISTS (SELECT 1 FROM public.user_profile WHERE id = auth.uid() AND role = 'admin_master'));
+
+-- Links de Afiliados
 DROP POLICY IF EXISTS "Afiliados podem ver seus links" ON public.tracking_links;
 CREATE POLICY "Afiliados podem ver seus links" ON public.tracking_links FOR SELECT USING (true);
 
@@ -63,7 +77,6 @@ DROP POLICY IF EXISTS "Adição de links livre para admin" ON public.tracking_li
 CREATE POLICY "Adição de links livre para admin" ON public.tracking_links FOR ALL USING (true);
 
 -- 4. TRIGGER DEFINITIVA CORRIGIDA (Atomicidade via ON CONFLICT)
--- Resolve o Erro 500 no Auth ao lidar com leads pré-existentes
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
@@ -94,7 +107,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 2️⃣ Criar trigger no auth.users
+-- Criar trigger no auth.users
 DROP TRIGGER IF EXISTS sync_user_profile ON auth.users;
 CREATE TRIGGER sync_user_profile
 AFTER INSERT ON auth.users

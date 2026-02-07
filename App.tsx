@@ -120,50 +120,59 @@ const App: React.FC = () => {
 
   const syncAuth = async () => {
     if (!supabase) return;
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    
-    if (currentSession) {
-      const profile = await storeService.getProfileAfterLogin(currentSession.user.id);
-      if (profile) {
-        if (profile.status === UserStatus.ACTIVE) {
-          const newSession = storeService.createSession(profile);
-          setSession(newSession);
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      
+      if (currentSession) {
+        const profile = await storeService.getProfileAfterLogin(currentSession.user.id);
+        if (profile) {
+          if (profile.status === UserStatus.ACTIVE) {
+            const newSession = storeService.createSession(profile);
+            setSession(newSession);
 
-          // CRÍTICO: Verificamos se há um hash de recuperação ANTES de qualquer redirecionamento
-          const hasRecoveryHash = window.location.hash.includes('type=recovery') || 
-                                 window.location.hash.includes('type=invite') ||
-                                 window.location.hash.includes('type=magiclink');
+            // CRÍTICO: Verificamos se há um hash de recuperação ANTES de qualquer redirecionamento
+            const hasRecoveryHash = window.location.hash.includes('type=recovery') || 
+                                   window.location.hash.includes('type=invite') ||
+                                   window.location.hash.includes('type=magiclink');
 
-          if (!isResetPasswordView && !hasRecoveryHash) {
-             if (profile.isDefaultPassword) setMustChangePassword(true);
-             else handleRoleLanding(profile.role);
-          } else if (hasRecoveryHash) {
-             // Forçamos a rota de redefinição se o token estiver presente
-             setIsResetPasswordView(true);
-             setCurrentRoute('reset-password');
+            if (!isResetPasswordView && !hasRecoveryHash) {
+               if (profile.isDefaultPassword) setMustChangePassword(true);
+               else handleRoleLanding(profile.role);
+            } else if (hasRecoveryHash) {
+               // Forçamos a rota de redefinição se o token estiver presente
+               setIsResetPasswordView(true);
+               setCurrentRoute('reset-password');
+            }
+          } else {
+            setAuthError('Conta inativa.');
+            await supabase.auth.signOut();
           }
-        } else {
-          setAuthError('Conta inativa.');
-          await supabase.auth.signOut();
         }
       }
+    } catch (e) {
+      console.error("[GFIT-APP] Erro crítico em syncAuth:", e);
     }
   };
 
   useEffect(() => {
     const init = async () => {
-      await storeService.initializeSystem();
-      
-      // Detecção prévia de hash de recuperação para evitar flashes de outras telas
-      if (window.location.hash.includes('type=recovery') || 
-          window.location.hash.includes('type=invite') ||
-          window.location.hash.includes('type=magiclink')) {
-        setIsResetPasswordView(true);
-        setCurrentRoute('reset-password');
-      }
+      try {
+        await storeService.initializeSystem();
+        
+        // Detecção prévia de hash de recuperação para evitar flashes de outras telas
+        if (window.location.hash.includes('type=recovery') || 
+            window.location.hash.includes('type=invite') ||
+            window.location.hash.includes('type=magiclink')) {
+          setIsResetPasswordView(true);
+          setCurrentRoute('reset-password');
+        }
 
-      await syncAuth();
-      setIsSystemReady(true);
+        await syncAuth();
+      } catch (e) {
+        console.error("[GFIT-APP] Falha na inicialização do sistema:", e);
+      } finally {
+        setIsSystemReady(true);
+      }
     };
     init();
 

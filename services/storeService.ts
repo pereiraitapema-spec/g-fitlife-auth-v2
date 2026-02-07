@@ -170,51 +170,67 @@ export const storeService = {
   async getProfileAfterLogin(userId: string): Promise<AppUser | null> {
     if (!supabase) return null;
     
-    let { data: profile } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
-    
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return profile ? this.normalizeProfile(profile) : null;
-
-    const email = authUser.email?.toLowerCase();
-    const isMasterEmail = email === MASTER_EMAIL;
-
-    if (profile) {
-      if (isMasterEmail && profile.role !== UserRole.ADMIN_MASTER) {
-        const { data: updated } = await supabase.from('user_profile')
-          .update({ role: UserRole.ADMIN_MASTER })
-          .eq('id', userId)
-          .select()
-          .single();
-        return this.normalizeProfile(updated);
+    try {
+      let { data: profile, error: fetchError } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
+      
+      // Se houver erro de servidor (500), evita crash
+      if (fetchError) {
+        console.error("[GFIT-DB-ERROR] Erro ao buscar perfil:", fetchError);
+        return null;
       }
-      return this.normalizeProfile(profile);
-    }
 
-    const newProfileData = {
-      id: authUser.id,
-      email: email,
-      name: authUser.user_metadata?.full_name || (isMasterEmail ? 'Master Admin' : 'Membro G-Fit'),
-      role: isMasterEmail ? UserRole.ADMIN_MASTER : UserRole.CUSTOMER,
-      status: UserStatus.ACTIVE,
-      login_type: 'hybrid',
-      is_default_password: !authUser.app_metadata.provider || authUser.app_metadata.provider === 'email', 
-      created_at: new Date().toISOString()
-    };
-    
-    const { data: created } = await supabase.from('user_profile').insert(newProfileData).select().single();
-    return this.normalizeProfile(created);
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return profile ? this.normalizeProfile(profile) : null;
+
+      const email = authUser.email?.toLowerCase();
+      const isMasterEmail = email === MASTER_EMAIL;
+
+      if (profile) {
+        if (isMasterEmail && profile.role !== UserRole.ADMIN_MASTER) {
+          const { data: updated } = await supabase.from('user_profile')
+            .update({ role: UserRole.ADMIN_MASTER })
+            .eq('id', userId)
+            .select()
+            .maybeSingle();
+          return this.normalizeProfile(updated);
+        }
+        return this.normalizeProfile(profile);
+      }
+
+      const newProfileData = {
+        id: authUser.id,
+        email: email,
+        name: authUser.user_metadata?.full_name || (isMasterEmail ? 'Master Admin' : 'Membro G-Fit'),
+        role: isMasterEmail ? UserRole.ADMIN_MASTER : UserRole.CUSTOMER,
+        status: UserStatus.ACTIVE,
+        login_type: 'hybrid',
+        is_default_password: !authUser.app_metadata.provider || authUser.app_metadata.provider === 'email', 
+        created_at: new Date().toISOString()
+      };
+      
+      const { data: created, error: insertError } = await supabase.from('user_profile').insert(newProfileData).select().maybeSingle();
+      if (insertError) {
+        console.error("[GFIT-DB-ERROR] Erve ao criar perfil:", insertError);
+        return null;
+      }
+      return this.normalizeProfile(created);
+    } catch (e) {
+      console.error("[GFIT-CRITICAL] Falha no fluxo de sincronia de perfil:", e);
+      return null;
+    }
   },
 
-  normalizeProfile(p: any): AppUser {
+  normalizeProfile(p: any): AppUser | null {
+    if (!p) return null;
     return {
       id: p.id,
-      email: p.email,
-      name: p.name,
-      role: p.role as UserRole,
-      status: p.status as UserStatus,
-      createdAt: p.created_at,
-      isDefaultPassword: p.is_default_password,
-      loginType: p.login_type
+      email: p.email || '',
+      name: p.name || 'Usuário G-Fit',
+      role: (p.role as UserRole) || UserRole.CUSTOMER,
+      status: (p.status as UserStatus) || UserStatus.ACTIVE,
+      createdAt: p.created_at || new Date().toISOString(),
+      isDefaultPassword: p.is_default_password || false,
+      loginType: p.login_type || 'hybrid'
     };
   },
 
@@ -236,7 +252,11 @@ export const storeService = {
   getActiveSession(): UserSession | null {
     const saved = sessionStorage.getItem(KEY_SESSION);
     if (!saved) return null;
-    return JSON.parse(saved);
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return null;
+    }
   },
 
   logout(): void {
@@ -254,7 +274,7 @@ export const storeService = {
         product_id: productId,
         slug: slug,
         visits: 0
-      }).select().single();
+      }).select().maybeSingle();
 
       if (error) throw error;
       return { success: true, link: data };
@@ -338,7 +358,7 @@ export const storeService = {
   async getUsers(): Promise<AppUser[]> {
     if (!supabase) return [];
     const { data } = await supabase.from('user_profile').select('*').order('created_at', { ascending: false });
-    return (data || []).map(u => this.normalizeProfile(u));
+    return (data || []).map(u => this.normalizeProfile(u)).filter(Boolean) as AppUser[];
   },
 
   async saveUser(user: AppUser): Promise<void> {
