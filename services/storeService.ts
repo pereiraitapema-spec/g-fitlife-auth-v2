@@ -241,7 +241,6 @@ export const storeService = {
           whatsapp: data.whatsapp, dominio: data.dominio, moeda: data.moeda, timezone: data.timezone,
           companyName: data.company_name, storeName: data.store_name, adminEmail: data.admin_email,
           systemStatus: data.system_status, environment: data.environment, privacyPolicy: data.privacy_policy,
-          // Fixed terms_of_use to termsOfUse to match interface SystemSettings
           termsOfUse: data.terms_of_use || data.termsOfUse, pwaInstalledCount: 0, pwaVersion: data.pwa_version,
           pushNotificationsActive: true, language: data.language, currency: data.currency
       } as SystemSettings;
@@ -312,22 +311,18 @@ export const storeService = {
   async saveProduct(p: Product): Promise<void> {
     if (!supabase) return;
     
-    const rawId = p.id.toString();
-    const numericIdMatch = rawId.match(/\d+/g);
-    const numericId = numericIdMatch ? numericIdMatch.join('') : Date.now().toString();
-
     const dbData: any = {
-      id: numericId,
+      id: p.id,
       name: p.name,
-      brand: p.brand || null,
+      brand: p.brand || '',
       price: p.price,
       original_price: p.originalPrice ?? null,
-      category: p.category || null,
-      image: p.image || null,
+      category: p.category || '',
+      image: p.image || '',
       rating: p.rating || 5,
       reviews: p.reviews || 0,
       tags: p.tags || [],
-      description: p.description || null,
+      description: p.description || '',
       is_affiliate: p.isAffiliate ?? false,
       status: p.status || 'active',
       department_id: p.departmentId || null,
@@ -337,7 +332,6 @@ export const storeService = {
     };
 
     const { error } = await supabase.from('products').upsert(dbData);
-    
     if (error) {
       console.error("[GFIT-DB-ERROR] Falha ao persistir produto:", error);
       throw error;
@@ -379,7 +373,9 @@ export const storeService = {
   },
   async saveDepartment(d: Department): Promise<void> { 
     if (!supabase) return;
-    await supabase.from('departments').upsert(d);
+    await supabase.from('departments').upsert({
+      id: d.id, name: d.name, status: d.status
+    });
     window.dispatchEvent(new Event('departmentsChanged'));
   },
   async getCategories(): Promise<Category[]> { 
@@ -399,20 +395,16 @@ export const storeService = {
   async saveCategory(c: Category): Promise<void> { 
     if (!supabase) return;
     
-    // CORREÇÃO: Enviar apenas o mapeamento snake_case básico para evitar erro 400
-    // se colunas opcionais ainda não existirem no cache do esquema.
     const dbData: any = {
       id: c.id,
       name: c.name,
       department_id: c.departmentId,
-      status: c.status
+      status: c.status,
+      slug: c.slug || null,
+      icon: c.icon || null,
+      description: c.description || '',
+      seo: c.seo || {}
     };
-
-    // Adiciona opcionais apenas se existirem no objeto, prevenindo erro PGRST204
-    if (c.slug) dbData.slug = c.slug;
-    if (c.icon) dbData.icon = c.icon;
-    if (c.description) dbData.description = c.description;
-    if (c.seo) dbData.seo = c.seo;
 
     const { error } = await supabase.from('categories').upsert(dbData);
     if (error) {
@@ -429,7 +421,11 @@ export const storeService = {
   },
   async saveBanner(banner: Banner): Promise<void> {
     if (!supabase) return;
-    await supabase.from('banners').upsert(banner);
+    await supabase.from('banners').upsert({
+      id: banner.id, title: banner.title, image_url: banner.imageUrl, 
+      link_type: banner.linkType, target_id: banner.targetId, status: banner.status,
+      start_date: banner.startDate, end_date: banner.endDate
+    });
     window.dispatchEvent(new Event('bannersChanged'));
   },
   async getCoupons(): Promise<Coupon[]> { 
@@ -439,48 +435,29 @@ export const storeService = {
       id: c.id,
       code: c.code,
       type: c.type,
-      value: c.value,
-      status: c.status
+      value: c.discount, // Mapeado de discount para value no front
+      status: c.active ? 'active' : 'inactive'
     }));
   },
   async saveCoupon(c: Coupon): Promise<void> { 
     if (!supabase) return;
     
+    // Mapeamento corrigido conforme colunas informadas pelo usuário
     const dbData: any = {
       id: c.id,
       code: c.code,
       type: c.type,
-      value: c.value,
-      status: c.status
+      discount: c.value || 0, // Corrigido de value para discount
+      active: c.status === 'active', // Corrigido de status para active (bool)
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // Default 30 dias
     };
 
-    let result = await supabase.from('coupons').insert(dbData);
-    let error = result.error;
+    const { error } = await supabase.from('coupons').upsert(dbData);
     
-    let maxRetries = 2;
-    while (error && error.code === 'PGRST204' && maxRetries > 0) {
-      const missingColumnMatch = error.message.match(/'([^']+)'/);
-      const colName = missingColumnMatch ? missingColumnMatch[1] : null;
-
-      if (colName && dbData[colName] !== undefined && colName !== 'id' && colName !== 'code') {
-        console.warn(`[GFIT-SERVICE] Coluna '${colName}' ausente no cache. Retentando sem ela...`);
-        delete dbData[colName];
-        const retryResult = await supabase.from('coupons').insert(dbData);
-        error = retryResult.error;
-      } else {
-        break;
-      }
-      maxRetries--;
-    }
-    
-    if (error && (error.code === '23505' || error.message.includes('already exists'))) {
-      const { error: updateError } = await supabase.from('coupons').update(dbData).eq('id', c.id);
-      if (updateError) throw updateError;
-    } else if (error) {
+    if (error) {
       console.error("[GFIT-DB-ERROR] Falha ao persistir cupom:", error);
       throw error;
     }
-    
     window.dispatchEvent(new Event('couponsChanged'));
   },
   async getAffiliates(): Promise<Affiliate[]> {

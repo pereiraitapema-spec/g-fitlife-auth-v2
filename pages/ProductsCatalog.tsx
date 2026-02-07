@@ -11,7 +11,7 @@ const ProductsCatalog: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [formData, setFormData] = useState<any>({
-    name: '', description: '', price: 0, status: 'active', departmentId: 'dept-1', categoryId: 'cat-1', image: ''
+    name: '', description: '', price: 0, status: 'active', departmentId: '', categoryId: '', image: '', brand: 'G-Labs'
   });
 
   const loadData = async () => {
@@ -34,24 +34,25 @@ const ProductsCatalog: React.FC = () => {
     
     setIsSubmitting(true);
     try {
-      // CORREÇÃO: Usar apenas Date.now() para garantir ID bigint no banco
+      // CORREÇÃO: Usar UUID real para cumprir restrição do Supabase (erro 22P02)
       const newProd: Product = {
         ...formData,
-        id: editId || Date.now().toString(),
+        id: editId || crypto.randomUUID(),
         brand: formData.brand || 'G-Labs',
         image: formData.image || 'https://picsum.photos/seed/placeholder/400/400',
         rating: formData.rating || 5,
         reviews: formData.reviews || 0,
         tags: formData.tags || [],
         category: formData.category || 'supplements',
-        status: formData.status
+        status: formData.status,
+        isAffiliate: formData.isAffiliate ?? false
       };
 
       await storeService.saveProduct(newProd);
       await loadData();
       setIsModalOpen(false);
       showFeedback("Produto persistido no Supabase!");
-      setFormData({ name: '', description: '', price: 0, status: 'active', departmentId: 'dept-1', categoryId: 'cat-1', image: '' });
+      setFormData({ name: '', description: '', price: 0, status: 'active', departmentId: '', categoryId: '', image: '', brand: 'G-Labs' });
       setEditId(null);
     } catch (err) {
       showFeedback("Erro ao salvar produto.", "error");
@@ -79,7 +80,7 @@ const ProductsCatalog: React.FC = () => {
           <p className="text-slate-500 font-medium">Gestão de produtos com sincronização em nuvem.</p>
         </div>
         <button 
-          onClick={() => { setEditId(null); setFormData({ name: '', description: '', price: 0, status: 'active', departmentId: 'dept-1', categoryId: 'cat-1', image: '' }); setIsModalOpen(true); }} 
+          onClick={() => { setEditId(null); setFormData({ name: '', description: '', price: 0, status: 'active', departmentId: '', categoryId: '', image: '', brand: 'G-Labs' }); setIsModalOpen(true); }} 
           className="px-10 py-5 bg-slate-900 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-xl"
         >
           + NOVO PRODUTO
