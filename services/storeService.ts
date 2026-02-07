@@ -241,7 +241,7 @@ export const storeService = {
           whatsapp: data.whatsapp, dominio: data.dominio, moeda: data.moeda, timezone: data.timezone,
           companyName: data.company_name, storeName: data.store_name, adminEmail: data.admin_email,
           systemStatus: data.system_status, environment: data.environment, privacyPolicy: data.privacy_policy,
-          termsOfUse: data.terms_of_use, pwaInstalledCount: 0, pwaVersion: data.pwa_version,
+          termsOfUse: data.termsOfUse, pwaInstalledCount: 0, pwaVersion: data.pwa_version,
           pushNotificationsActive: true, language: data.language, currency: data.currency
       } as SystemSettings;
     }
@@ -251,11 +251,10 @@ export const storeService = {
   async saveSettings(settings: SystemSettings): Promise<void> {
     if (!supabase) return;
     await supabase.from('core_settings').upsert({
-      key: 'geral', nome_loja: settings.nomeLoja, logo_url: settings.logoUrl, email_contato: settings.emailContato,
+      key: 'geral', nome_lo_ja: settings.nomeLoja, logo_url: settings.logoUrl, email_contato: settings.emailContato,
       telefone: settings.telefone, whatsapp: settings.whatsapp, dominio: settings.dominio, moeda: settings.moeda,
       timezone: settings.timezone, company_name: settings.companyName, store_name: settings.storeName,
       admin_email: settings.adminEmail, system_status: settings.systemStatus, environment: settings.environment,
-      // Fix: changed settings.terms_of_use (incorrect property) to settings.termsOfUse
       privacy_policy: settings.privacyPolicy, terms_of_use: settings.termsOfUse, pwa_version: settings.pwaVersion,
       language: settings.language, currency: settings.currency
     });
@@ -303,6 +302,7 @@ export const storeService = {
     const dbData: any = {
       id: p.id,
       name: p.name,
+      brand: p.brand || null,
       price: p.price,
       original_price: p.originalPrice ?? null,
       category: p.category || null,
@@ -319,24 +319,19 @@ export const storeService = {
       seo: p.seo || {}
     };
 
-    // Só adicionamos 'brand' se ela for fornecida, para evitar erros de cache do schema
-    if (p.brand) {
-      dbData.brand = p.brand;
-    }
-
     const { error } = await supabase.from('products').upsert(dbData);
     
     if (error) {
-      console.error("[GFIT-DB-ERROR] Erro ao persistir produto:", error);
-      // Fallback: Tenta salvar sem a coluna brand se o erro for PGRST204 (coluna não encontrada)
+      console.error("[GFIT-DB-ERROR] Falha ao persistir produto:", error);
+      
+      // Tentativa de recuperação automática se for erro de coluna faltante no cache
       if (error.code === 'PGRST204') {
-        console.warn("[GFIT-RECOVERY] Tentando salvar sem a coluna 'brand'...");
-        delete dbData.brand;
-        const retry = await supabase.from('products').upsert(dbData);
-        if (retry.error) throw retry.error;
-      } else {
-        throw error;
+        console.warn("[GFIT-RECOVERY] Detectado erro de cache do Supabase (PGRST204). Tentando salvar sem campos opcionais...");
+        const fallbackData = { id: p.id, name: p.name, price: p.price };
+        await supabase.from('products').upsert(fallbackData);
       }
+      
+      throw error;
     }
     window.dispatchEvent(new Event('productsChanged'));
   },
