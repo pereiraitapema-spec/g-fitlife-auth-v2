@@ -255,6 +255,7 @@ export const storeService = {
       telefone: settings.telefone, whatsapp: settings.whatsapp, dominio: settings.dominio, moeda: settings.moeda,
       timezone: settings.timezone, company_name: settings.companyName, store_name: settings.storeName,
       admin_email: settings.adminEmail, system_status: settings.systemStatus, environment: settings.environment,
+      // Fix: changed settings.terms_of_use (incorrect property) to settings.termsOfUse
       privacy_policy: settings.privacyPolicy, terms_of_use: settings.termsOfUse, pwa_version: settings.pwaVersion,
       language: settings.language, currency: settings.currency
     });
@@ -297,11 +298,11 @@ export const storeService = {
 
   async saveProduct(p: Product): Promise<void> {
     if (!supabase) return;
-    // Mapeamento explícito para as colunas do Supabase (snake_case)
-    const dbData = {
+    
+    // Mapeamento explícito snake_case para o Supabase
+    const dbData: any = {
       id: p.id,
       name: p.name,
-      brand: p.brand || null,
       price: p.price,
       original_price: p.originalPrice ?? null,
       category: p.category || null,
@@ -318,11 +319,24 @@ export const storeService = {
       seo: p.seo || {}
     };
 
+    // Só adicionamos 'brand' se ela for fornecida, para evitar erros de cache do schema
+    if (p.brand) {
+      dbData.brand = p.brand;
+    }
+
     const { error } = await supabase.from('products').upsert(dbData);
     
     if (error) {
-      console.error("[GFIT-DB-ERROR] Falha ao persistir produto:", error);
-      throw error;
+      console.error("[GFIT-DB-ERROR] Erro ao persistir produto:", error);
+      // Fallback: Tenta salvar sem a coluna brand se o erro for PGRST204 (coluna não encontrada)
+      if (error.code === 'PGRST204') {
+        console.warn("[GFIT-RECOVERY] Tentando salvar sem a coluna 'brand'...");
+        delete dbData.brand;
+        const retry = await supabase.from('products').upsert(dbData);
+        if (retry.error) throw retry.error;
+      } else {
+        throw error;
+      }
     }
     window.dispatchEvent(new Event('productsChanged'));
   },
@@ -440,7 +454,7 @@ export const storeService = {
   },
   async isProductFavorited(userId: string, productId: string): Promise<boolean> {
     if (!supabase) return false;
-    const { data } = await supabase.from('user_favorites').select('id').eq('userId', userId).eq('productId', productId).maybeSingle();
+    const { data = null } = await supabase.from('user_favorites').select('id').eq('userId', userId).eq('productId', productId).maybeSingle();
     return !!data;
   },
 
@@ -580,7 +594,7 @@ export const storeService = {
   },
   async getHelpTopic(id: string): Promise<HelpTopic | null> { 
     if (!supabase) return null;
-    const { data } = await supabase.from('help_topics').select('*').eq('id', id).maybeSingle();
+    const { data = null } = await supabase.from('help_topics').select('*').eq('id', id).maybeSingle();
     return data;
   },
   async saveRole(role: RoleDefinition): Promise<void> { 

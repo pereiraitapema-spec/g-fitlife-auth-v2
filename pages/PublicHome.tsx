@@ -13,6 +13,7 @@ const PublicHome: React.FC<PublicHomeProps> = ({ onNavigate, onAddToCart }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<UserSession | null>(null);
+  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
 
   // URLs otimizadas via Unsplash (WebP automático, compressão inteligente q=75 e largura otimizada)
   const HERO_IMAGE = "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=75&w=1600&compress=true";
@@ -144,12 +145,56 @@ const PublicHome: React.FC<PublicHomeProps> = ({ onNavigate, onAddToCart }) => {
                   key={p.id} 
                   product={p} 
                   onAddToCart={onAddToCart} 
+                  onQuickView={setQuickViewProduct}
                   user={session}
                />
              ))
            )}
         </div>
       </section>
+
+      {/* QUICK VIEW MODAL (Homepage) */}
+      {quickViewProduct && (
+        <div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-4xl rounded-[50px] shadow-2xl overflow-hidden flex flex-col md:flex-row animate-in zoom-in-95 duration-300">
+            <div className="md:w-1/2 bg-slate-50 relative">
+              <img src={quickViewProduct.image} className="w-full h-full object-cover aspect-square md:aspect-auto" alt={quickViewProduct.name} />
+              <button 
+                onClick={() => setQuickViewProduct(null)} 
+                className="absolute top-6 left-6 z-20 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg text-slate-400 hover:text-slate-900 md:hidden"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="md:w-1/2 p-8 md:p-12 space-y-8 flex flex-col justify-center relative">
+              <button 
+                onClick={() => setQuickViewProduct(null)} 
+                className="absolute top-8 right-8 z-20 text-slate-300 hover:text-slate-900 hidden md:block"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <div className="space-y-4">
+                <p className="text-xs font-black text-emerald-500 uppercase tracking-[0.3em]">{quickViewProduct.brand}</p>
+                <h3 className="text-3xl font-black text-slate-900 leading-tight">{quickViewProduct.name}</h3>
+              </div>
+              <div className="space-y-2">
+                <span className="text-4xl font-black text-slate-900">R$ {quickViewProduct.price.toFixed(2)}</span>
+              </div>
+              <p className="text-slate-600 leading-relaxed font-medium">
+                {quickViewProduct.description || "Descrição em carregamento..."}
+              </p>
+              <button 
+                onClick={() => { onAddToCart(quickViewProduct); setQuickViewProduct(null); }}
+                className="w-full py-6 bg-slate-900 text-white rounded-[28px] font-black text-lg shadow-2xl hover:bg-emerald-500 transition-all duration-300"
+              >
+                ADICIONAR AO CARRINHO
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Banner de Autoridade & Confiança */}
       <section className="bg-slate-900 rounded-[60px] p-12 md:p-24 text-white flex flex-col md:flex-row items-center justify-between gap-16 relative overflow-hidden">

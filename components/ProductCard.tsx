@@ -5,10 +5,11 @@ import { storeService } from '../services/storeService';
 interface ProductCardProps {
   product: Product;
   onAddToCart: (p: Product) => void;
+  onQuickView?: (p: Product) => void;
   user?: UserSession | null;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, user }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onQuickView, user }) => {
   const [isFavorited, setIsFavorited] = useState(false);
   const [loadingFav, setLoadingFav] = useState(false);
 
@@ -57,12 +58,25 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, user })
           alt={product.name}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
+        
+        {/* Quick View Overlay Button */}
+        {onQuickView && (
+          <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
+            <button 
+              onClick={(e) => { e.stopPropagation(); onQuickView(product); }}
+              className="bg-white text-slate-900 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-emerald-500 hover:text-white transition-all transform translate-y-4 group-hover:translate-y-0"
+            >
+              Vista Rápida
+            </button>
+          </div>
+        )}
+
         {product.originalPrice && (
-          <div className="absolute bottom-4 left-4 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">
+          <div className="absolute bottom-4 left-4 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider z-20">
             Oferta
           </div>
         )}
-        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-1.5 rounded-full shadow-sm text-xs font-bold flex items-center gap-1">
+        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-1.5 rounded-full shadow-sm text-xs font-bold flex items-center gap-1 z-20">
           <span className="text-amber-400">★</span> {product.rating}
         </div>
       </div>

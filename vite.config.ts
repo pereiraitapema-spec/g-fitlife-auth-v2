@@ -1,12 +1,11 @@
-
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import * as nodeProcess from 'process';
 
 export default defineConfig(({ mode }) => {
   // Carrega variáveis dos arquivos .env (VITE_ prefixadas por padrão)
-  // Fix: Using process.cwd() directly to resolve the type error where nodeProcess was incorrectly inferred without the cwd() method.
-  const env = loadEnv(mode, process.cwd(), '');
+  // Fix: Using nodeProcess.cwd() directly to resolve the type error where the global process was incorrectly inferred.
+  const env = loadEnv(mode, nodeProcess.cwd(), '');
 
   // Prioriza variáveis de ambiente do SISTEMA (Railway) sobre as do arquivo .env
   // Mapeia tanto nomes comuns (SUPABASE_URL) quanto específicos do Vite (VITE_SUPABASE_URL)
