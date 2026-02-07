@@ -49,34 +49,35 @@ ALTER TABLE public.user_profile ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.core_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tracking_links ENABLE ROW LEVEL SECURITY;
 
--- POLICIES BÁSICAS (Com limpeza prévia para evitar erro 42710)
+-- POLICIES CORRIGIDAS (Remoção de recursão infinita)
 
--- Configurações: Leitura pública, Escrita apenas para Admins
+-- Configurações: Leitura pública, Escrita apenas para Admins Master via JWT
 DROP POLICY IF EXISTS "Leitura pública de settings" ON public.core_settings;
 CREATE POLICY "Leitura pública de settings" ON public.core_settings FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admins podem gerir settings" ON public.core_settings;
 CREATE POLICY "Admins podem gerir settings" ON public.core_settings 
 FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM public.user_profile WHERE id = auth.uid() AND role = 'admin_master'));
+USING ( (auth.jwt() ->> 'email') IN ('master@gfitlife.com', 'pereira.itapema@gmail.com') );
 
--- Perfis: Usuário vê o próprio, Admin vê e edita todos
+-- Perfis: Usuário vê o próprio, Master vê todos via JWT para evitar loop
 DROP POLICY IF EXISTS "Perfil visível pelo próprio usuário" ON public.user_profile;
-CREATE POLICY "Perfil visível pelo próprio usuário" ON public.user_profile FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Perfil visível pelo próprio usuário" ON public.user_profile 
+FOR SELECT USING (auth.uid() = id);
 
 DROP POLICY IF EXISTS "Admins gerem todos os perfis" ON public.user_profile;
 CREATE POLICY "Admins gerem todos os perfis" ON public.user_profile 
 FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM public.user_profile WHERE id = auth.uid() AND role = 'admin_master'));
+USING ( (auth.jwt() ->> 'email') IN ('master@gfitlife.com', 'pereira.itapema@gmail.com') );
 
 -- Links de Afiliados
 DROP POLICY IF EXISTS "Afiliados podem ver seus links" ON public.tracking_links;
 CREATE POLICY "Afiliados podem ver seus links" ON public.tracking_links FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Adição de links livre para admin" ON public.tracking_links;
-CREATE POLICY "Adição de links livre para admin" ON public.tracking_links FOR ALL USING (true);
+CREATE POLICY "Adição de links livre para admin" ON public.tracking_links FOR ALL USING ( (auth.jwt() ->> 'email') IN ('master@gfitlife.com', 'pereira.itapema@gmail.com') );
 
--- 4. TRIGGER DEFINITIVA CORRIGIDA (Atomicidade via ON CONFLICT)
+-- 4. TRIGGER DE SINCRONIZAÇÃO DE PERFIL
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
@@ -114,7 +115,7 @@ AFTER INSERT ON auth.users
 FOR EACH ROW
 EXECUTE FUNCTION public.handle_new_user();
 
--- Garantir que o bucket uploads exista e tenha as políticas corretas
+-- Garantir que o bucket uploads exista
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('uploads', 'uploads', true)
 ON CONFLICT (id) DO NOTHING;

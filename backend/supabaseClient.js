@@ -1,47 +1,33 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * GFITLIFE SUPABASE CLIENT - UNIFIED INITIALIZATION
- * Este arquivo é compartilhado entre o frontend (Vite) e o backend (Node.js).
+ * SUPABASE CLIENT - G-FITLIFE
+ * Este arquivo centraliza a conexão com o banco de dados.
+ * As variáveis devem ser prefixadas com VITE_ para o frontend ou estar no process.env para o backend.
  */
 
-// Lógica de captura de variáveis compatível com Vite (Browser) e Node.js (Server)
-const getEnv = (key) => {
-  // 1. Tenta via import.meta.env (Padrão Vite no Browser)
-  try {
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
-      return import.meta.env[key];
-    }
-  } catch (e) {}
+// Acesso direto para permitir substituição estática pelo Vite.
+// Não utilize encadeamento opcional ou verificações complexas aqui, 
+// pois o Vite precisa identificar a string exata para substituição durante o build.
+const url = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || 
+            (typeof process !== 'undefined' && process.env && process.env.VITE_SUPABASE_URL) || 
+            (typeof process !== 'undefined' && process.env && process.env.SUPABASE_URL) || 
+            '';
 
-  // 2. Tenta via process.env (Node.js ou Injeção via Define no Vite)
-  try {
-    if (typeof process !== 'undefined' && process.env && process.env[key]) {
-      return process.env[key];
-    }
-  } catch (e) {}
+const key = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) || 
+            (typeof process !== 'undefined' && process.env && process.env.VITE_SUPABASE_ANON_KEY) || 
+            (typeof process !== 'undefined' && process.env && process.env.SUPABASE_ANON_KEY) || 
+            '';
 
-  return '';
-};
-
-// Captura as chaves priorizando o prefixo VITE_ exigido pelo compilador frontend
-const url = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL');
-const key = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANON_KEY');
-
+// Inicializa o cliente apenas se tivermos as credenciais
 export const supabase = (url && key) ? createClient(url, key) : null;
 
-// Diagnóstico de inicialização em tempo de execução
-if (supabase) {
-  const env = typeof window !== 'undefined' ? 'Frontend' : 'Backend';
-  try {
-    const host = new URL(url).hostname;
-    console.log(`[GFIT-SYSTEM] Supabase ativo no ${env}: ${host}`);
-  } catch (e) {
-    console.log(`[GFIT-SYSTEM] Supabase ativo no ${env}.`);
+// Diagnóstico de conexão (apenas no navegador)
+if (typeof window !== 'undefined') {
+  if (supabase) {
+    console.log("[GFIT-SYSTEM] Supabase inicializado com sucesso.");
+  } else {
+    console.error("[GFIT-ERROR] Credenciais do Supabase ausentes no bundle do cliente.");
+    console.warn("[GFIT-TIP] Certifique-se de que VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY estão configuradas no ambiente de build do Railway.");
   }
-} else if (typeof window !== 'undefined') {
-  // Log de erro crítico específico para o bundle do cliente
-  console.error("[GFIT-ERROR] Credenciais do Supabase ausentes no bundle do cliente.");
-  console.warn("[GFIT-TIP] Verifique se SUPABASE_URL e SUPABASE_ANON_KEY estão configuradas nas variáveis do Railway.");
-  console.warn("[GFIT-TIP] Após configurar, realize um NOVO DEPLOY para que o build do Vite congele os valores no código.");
 }
