@@ -1,78 +1,74 @@
--- G-FITLIFE DATABASE FIX: CATEGORY_ID AND SCHEMA RELOAD
--- Execute este script no SQL Editor do seu Supabase para resolver o erro de "column not found".
+-- G-FITLIFE DATABASE SYNC: CORE TABLES
+-- Execute este script no SQL Editor do Supabase para criar as tabelas faltantes.
 
-DO $$ 
-BEGIN 
-    -- 1. Garante que a tabela products existe
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'products') THEN
-        CREATE TABLE public.products (
-            id BIGINT PRIMARY KEY,
-            name TEXT NOT NULL,
-            price NUMERIC NOT NULL,
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-    END IF;
+-- 1. Tabela de Departamentos
+CREATE TABLE IF NOT EXISTS public.departments (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-    -- 2. Adiciona colunas de classificação se faltarem
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='category_id') THEN
-        ALTER TABLE public.products ADD COLUMN category_id TEXT;
-    END IF;
+-- 2. Tabela de Categorias
+CREATE TABLE IF NOT EXISTS public.categories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    department_id TEXT REFERENCES public.departments(id) ON DELETE CASCADE,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='department_id') THEN
-        ALTER TABLE public.products ADD COLUMN department_id TEXT;
-    END IF;
+-- 3. Tabela de Afiliados
+-- Nota: Colunas em aspas duplas para manter o camelCase esperado pelo frontend
+CREATE TABLE IF NOT EXISTS public.affiliates (
+    id TEXT PRIMARY KEY,
+    "userId" TEXT,
+    name TEXT,
+    email TEXT,
+    status TEXT DEFAULT 'inactive',
+    "commissionRate" NUMERIC DEFAULT 15,
+    "totalSales" INTEGER DEFAULT 0,
+    balance NUMERIC DEFAULT 0,
+    "refCode" TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-    -- 3. Outras colunas necessárias para o catálogo e sincronização com o frontend
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='brand') THEN
-        ALTER TABLE public.products ADD COLUMN brand TEXT;
-    END IF;
+-- 4. Tabela de Links de Rastreamento (Tracking Links)
+CREATE TABLE IF NOT EXISTS public.tracking_links (
+    id BIGSERIAL PRIMARY KEY,
+    affiliate_id TEXT REFERENCES public.affiliates(id) ON DELETE CASCADE,
+    product_id BIGINT REFERENCES public.products(id) ON DELETE CASCADE,
+    slug TEXT UNIQUE,
+    visits INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='original_price') THEN
-        ALTER TABLE public.products ADD COLUMN original_price NUMERIC;
-    END IF;
+-- 5. Outras tabelas auxiliares se não existirem
+CREATE TABLE IF NOT EXISTS public.user_favorites (
+    id TEXT PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "createdAt" TIMESTAMPTZ DEFAULT NOW()
+);
 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='category') THEN
-        ALTER TABLE public.products ADD COLUMN category TEXT;
-    END IF;
+-- 6. Garantir permissões públicas (para desenvolvimento/teste inicial)
+-- Em produção, recomenda-se configurar RLS adequadamente.
+ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.affiliates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tracking_links ENABLE ROW LEVEL SECURITY;
 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='image') THEN
-        ALTER TABLE public.products ADD COLUMN image TEXT;
-    END IF;
+DROP POLICY IF EXISTS "Public Access" ON public.departments;
+CREATE POLICY "Public Access" ON public.departments FOR ALL USING (true) WITH CHECK (true);
 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='rating') THEN
-        ALTER TABLE public.products ADD COLUMN rating NUMERIC DEFAULT 5;
-    END IF;
+DROP POLICY IF EXISTS "Public Access" ON public.categories;
+CREATE POLICY "Public Access" ON public.categories FOR ALL USING (true) WITH CHECK (true);
 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='reviews') THEN
-        ALTER TABLE public.products ADD COLUMN reviews INTEGER DEFAULT 0;
-    END IF;
+DROP POLICY IF EXISTS "Public Access" ON public.affiliates;
+CREATE POLICY "Public Access" ON public.affiliates FOR ALL USING (true) WITH CHECK (true);
 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='tags') THEN
-        ALTER TABLE public.products ADD COLUMN tags TEXT[] DEFAULT '{}';
-    END IF;
+DROP POLICY IF EXISTS "Public Access" ON public.tracking_links;
+CREATE POLICY "Public Access" ON public.tracking_links FOR ALL USING (true) WITH CHECK (true);
 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='description') THEN
-        ALTER TABLE public.products ADD COLUMN description TEXT;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='is_affiliate') THEN
-        ALTER TABLE public.products ADD COLUMN is_affiliate BOOLEAN DEFAULT FALSE;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='status') THEN
-        ALTER TABLE public.products ADD COLUMN status TEXT DEFAULT 'active';
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='seller_id') THEN
-        ALTER TABLE public.products ADD COLUMN seller_id TEXT;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='seo') THEN
-        ALTER TABLE public.products ADD COLUMN seo JSONB DEFAULT '{}';
-    END IF;
-
-END $$;
-
--- 4. CRÍTICO: Recarregar o cache do PostgREST (Supabase API)
--- Isso garante que as novas colunas sejam visíveis imediatamente para a API REST.
+-- 7. CRÍTICO: Recarregar o cache do PostgREST (Supabase API)
 NOTIFY pgrst, 'reload schema';

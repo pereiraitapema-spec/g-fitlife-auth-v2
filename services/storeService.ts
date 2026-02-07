@@ -242,7 +242,6 @@ export const storeService = {
           whatsapp: data.whatsapp, dominio: data.dominio, moeda: data.moeda, timezone: data.timezone,
           companyName: data.company_name, storeName: data.store_name, adminEmail: data.admin_email,
           systemStatus: data.system_status, environment: data.environment, privacyPolicy: data.privacy_policy,
-          // Fixed: column mapping for termsOfUse (assumed snake_case terms_of_use in DB)
           termsOfUse: data.terms_of_use || data.termsOfUse, pwaInstalledCount: 0, pwaVersion: data.pwa_version,
           pushNotificationsActive: true, language: data.language, currency: data.currency
       } as SystemSettings;
@@ -254,7 +253,6 @@ export const storeService = {
     if (!supabase) return;
     await supabase.from('core_settings').upsert({
       key: 'geral', 
-      // Fixed typo: nome_lo_ja -> nome_loja to match getSettings
       nome_loja: settings.nomeLoja, 
       logo_url: settings.logoUrl, 
       email_contato: settings.emailContato,
@@ -266,12 +264,10 @@ export const storeService = {
       company_name: settings.companyName, 
       store_name: settings.storeName,
       admin_email: settings.adminEmail, 
-      // Fixed: system_status property name is systemStatus in SystemSettings interface
       system_status: settings.systemStatus, 
       environment: settings.environment,
       privacy_policy: settings.privacyPolicy, 
       terms_of_use: settings.termsOfUse, 
-      // Fixed: pwa_version property name is pwaVersion in SystemSettings interface
       pwa_version: settings.pwaVersion,
       language: settings.language, 
       currency: settings.currency
@@ -316,7 +312,6 @@ export const storeService = {
   async saveProduct(p: Product): Promise<void> {
     if (!supabase) return;
     
-    // CORREÇÃO 22P02 DEFINITIVA: Garantir que o ID seja puramente numérico e não nulo
     const rawId = p.id.toString();
     const numericIdMatch = rawId.match(/\d+/g);
     const numericId = numericIdMatch ? numericIdMatch.join('') : Date.now().toString();
@@ -390,11 +385,35 @@ export const storeService = {
   async getCategories(): Promise<Category[]> { 
     if (!supabase) return [];
     const { data } = await supabase.from('categories').select('*');
-    return data || [];
+    return (data || []).map(c => ({
+      id: c.id,
+      name: c.name,
+      departmentId: c.department_id,
+      status: c.status,
+      slug: c.slug,
+      icon: c.icon,
+      description: c.description,
+      seo: c.seo
+    }));
   },
   async saveCategory(c: Category): Promise<void> { 
     if (!supabase) return;
-    await supabase.from('categories').upsert(c);
+    // CORREÇÃO 400: Mapear campos para snake_case do banco
+    const dbData = {
+      id: c.id,
+      name: c.name,
+      department_id: c.departmentId,
+      status: c.status,
+      slug: c.slug || null,
+      icon: c.icon || null,
+      description: c.description || null,
+      seo: c.seo || {}
+    };
+    const { error } = await supabase.from('categories').upsert(dbData);
+    if (error) {
+      console.error("[GFIT-DB-ERROR] Falha ao salvar categoria:", error);
+      throw error;
+    }
     window.dispatchEvent(new Event('categoriesChanged'));
   },
 
