@@ -49,49 +49,46 @@ ALTER TABLE public.user_profile ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.core_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tracking_links ENABLE ROW LEVEL SECURITY;
 
--- POLICIES BÁSICAS
+-- POLICIES BÁSICAS (Com limpeza prévia para evitar erro 42710)
+DROP POLICY IF EXISTS "Leitura pública de settings" ON public.core_settings;
 CREATE POLICY "Leitura pública de settings" ON public.core_settings FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Perfil visível pelo próprio usuário" ON public.user_profile;
 CREATE POLICY "Perfil visível pelo próprio usuário" ON public.user_profile FOR SELECT USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Afiliados podem ver seus links" ON public.tracking_links;
 CREATE POLICY "Afiliados podem ver seus links" ON public.tracking_links FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Adição de links livre para admin" ON public.tracking_links;
 CREATE POLICY "Adição de links livre para admin" ON public.tracking_links FOR ALL USING (true);
 
--- 4. TRIGGER DEFINITIVA CORRIGIDA
--- Resolve o erro 500 ao usar os nomes de colunas corretos (name em vez de full_name)
+-- 4. TRIGGER DEFINITIVA CORRIGIDA (Atomicidade via ON CONFLICT)
+-- Resolve o Erro 500 no Auth ao lidar com leads pré-existentes
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  -- Definir schema
-  SET search_path = public;
-
-  -- Tentar atualizar perfil existente pelo e-mail (captura o ID se o usuário já existir por lead/checkout)
-  UPDATE public.user_profile
-  SET id = NEW.id,
-      name = COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', name, 'Membro G-Fit'),
-      email = NEW.email,
+  INSERT INTO public.user_profile (id, email, name, role, status, is_default_password, created_at, updated_at)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', 'Membro G-Fit'),
+    CASE 
+      WHEN (NEW.email IN ('master@gfitlife.com', 'pereira.itapema@gmail.com')) THEN 'admin_master' 
+      ELSE 'customer' 
+    END,
+    'active',
+    FALSE,
+    now(),
+    now()
+  )
+  ON CONFLICT (email) DO UPDATE
+  SET id = EXCLUDED.id,
+      name = COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', public.user_profile.name),
       updated_at = now(),
       role = CASE 
         WHEN (NEW.email IN ('master@gfitlife.com', 'pereira.itapema@gmail.com')) THEN 'admin_master' 
-        ELSE role 
-      END
-  WHERE email = NEW.email;
-
-  -- Se nenhum registro foi atualizado, inserir novo
-  IF NOT FOUND THEN
-    INSERT INTO public.user_profile (id, email, name, role, status, is_default_password, created_at, updated_at)
-    VALUES (
-      NEW.id,
-      NEW.email,
-      COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', 'Membro G-Fit'),
-      CASE 
-        WHEN (NEW.email IN ('master@gfitlife.com', 'pereira.itapema@gmail.com')) THEN 'admin_master' 
-        ELSE 'customer' 
-      END,
-      'active',
-      FALSE,
-      now(),
-      now()
-    );
-  END IF;
+        ELSE public.user_profile.role 
+      END;
 
   RETURN NEW;
 END;
@@ -104,16 +101,15 @@ AFTER INSERT ON auth.users
 FOR EACH ROW
 EXECUTE FUNCTION public.handle_new_user();
 
--- Garantir que o bucket uploads seja acessível
-DO $$ 
-BEGIN
-    IF EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'uploads') THEN
-        DELETE FROM storage.policies WHERE bucket_id = 'uploads';
-        
-        INSERT INTO storage.policies (name, color, definition, check, operation, bucket_id)
-        VALUES ('Permitir upload para autenticados', 'emerald', null, '(auth.uid() IS NOT NULL)', 'INSERT', 'uploads');
-        
-        INSERT INTO storage.policies (name, color, definition, check, operation, bucket_id)
-        VALUES ('Acesso público para leitura', 'blue', '(bucket_id = ''uploads'')', null, 'SELECT', 'uploads');
-    END IF;
-END $$;
+-- Garantir que o bucket uploads exista e tenha as políticas corretas
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('uploads', 'uploads', true)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Permitir upload para autenticados" ON storage.objects;
+CREATE POLICY "Permitir upload para autenticados" ON storage.objects
+FOR INSERT WITH CHECK (bucket_id = 'uploads' AND auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Acesso público para leitura" ON storage.objects;
+CREATE POLICY "Acesso público para leitura" ON storage.objects
+FOR SELECT USING (bucket_id = 'uploads');

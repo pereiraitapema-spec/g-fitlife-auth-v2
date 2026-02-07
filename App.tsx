@@ -226,8 +226,8 @@ const App: React.FC = () => {
   };
 
   /**
-   * FLUXO PROFISSIONAL DE RECUPERAÇÃO DE ACESSO (MAGIC LINK)
-   * Utiliza signInWithOtp para gerar Magic Link redirecionando para redefinição segura.
+   * FLUXO PROFISSIONAL DE RECUPERAÇÃO DE ACESSO
+   * CORREÇÃO: Usa o método recoverPassword (resetPasswordForEmail) do storeService
    */
   const handleRecover = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e) e.preventDefault();
@@ -242,24 +242,18 @@ const App: React.FC = () => {
     setIsLoggingIn(true);
     
     try {
-      if (!supabase) throw new Error("Serviço de Autenticação indisponível.");
+      // Correção: Uso do método de recuperação real para evitar erros de banco ao tentar criar usuário via OTP
+      const res = await storeService.recoverPassword(email);
       
-      // DISPARO DE MAGIC LINK PROFISSIONAL
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email,
-        options: {
-          emailRedirectTo: 'https://g-fitlife-auth-v2-production.up.railway.app/reset-password'
-        }
-      });
-      
-      if (error) throw error;
-
-      console.log("MAGICLINK_SENT_OK");
-      triggerFeedback('Link de recuperação enviado. Verifique seu email.', 'success');
-      setIsRecoveryMode(false);
+      if (res.success) {
+        triggerFeedback('Link de recuperação enviado. Verifique seu email.', 'success');
+        setIsRecoveryMode(false);
+      } else {
+        throw new Error(res.error);
+      }
     } catch (err: any) {
       console.error('[GFIT-AUTH] Erro ao disparar recuperação:', err);
-      triggerFeedback('Erro ao enviar link de recuperação', 'error');
+      triggerFeedback(err.message || 'Erro ao enviar link de recuperação', 'error');
     } finally {
       setIsLoggingIn(false);
     }
@@ -334,7 +328,7 @@ const App: React.FC = () => {
              <div className="bg-white rounded-[50px] p-12 max-w-sm w-full shadow-2xl space-y-6 text-center animate-in zoom-in-95">
                 <div className="text-4xl">📧</div>
                 <h3 className="text-2xl font-black text-slate-900 uppercase">Recuperar Acesso</h3>
-                <p className="text-slate-500 text-xs font-medium leading-relaxed">Enviaremos um link de acesso direto (Magic Link) para o seu e-mail cadastrado.</p>
+                <p className="text-slate-500 text-xs font-medium leading-relaxed">Enviaremos um link de acesso direto para o seu e-mail cadastrado.</p>
                 <form onSubmit={handleRecover} className="space-y-4">
                    <input required type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="Seu e-mail de acesso" className="w-full bg-slate-50 border-none rounded-2xl p-6 outline-none font-bold shadow-inner" />
                    <button 
