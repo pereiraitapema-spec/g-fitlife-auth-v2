@@ -446,8 +446,8 @@ export const storeService = {
   async saveCoupon(c: Coupon): Promise<void> { 
     if (!supabase) return;
     
-    // CORREÇÃO: Mapeamento explícito de campos.
-    const dbData = {
+    // Mapeamento inicial completo
+    const dbData: any = {
       id: c.id,
       code: c.code,
       type: c.type,
@@ -455,15 +455,19 @@ export const storeService = {
       status: c.status
     };
 
-    // CORREÇÃO SUPREME: Se o ID for novo (gerado pelo Date.now()), usamos insert()
-    // para respeitar a política de RLS "Authenticated insert coupons".
-    // Se estivermos editando (id fixo), usamos upsert() que requer políticas adicionais.
-    // Para simplificar e corrigir o erro de cadastro, usaremos insert() se for novo.
+    // CORREÇÃO: Lógica defensiva para PGRST204 (status column not found)
+    // Tenta primeiro com o mapeamento completo
+    let { error } = await supabase.from('coupons').insert(dbData);
     
-    const { error } = await supabase.from('coupons').insert(dbData);
+    // Se o erro for especificamente PGRST204 e mencionar 'status', tenta sem a coluna status
+    if (error && error.code === 'PGRST204' && error.message.includes('status')) {
+      console.warn("[GFIT-SERVICE] Coluna 'status' não encontrada no cache do schema. Tentando insert sem ela...");
+      delete dbData.status;
+      const retry = await supabase.from('coupons').insert(dbData);
+      error = retry.error;
+    }
     
     // Se o insert falhar por duplicidade de chave primária, tentamos o update
-    // apenas para garantir que a funcionalidade de alternar status não quebre.
     if (error && (error.code === '23505' || error.message.includes('already exists'))) {
       const { error: updateError } = await supabase.from('coupons').update(dbData).eq('id', c.id);
       if (updateError) {
