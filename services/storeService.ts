@@ -446,8 +446,7 @@ export const storeService = {
   async saveCoupon(c: Coupon): Promise<void> { 
     if (!supabase) return;
     
-    // CORREÇÃO: Mapeamento explícito para evitar erro 400 (Bad Request) no Supabase.
-    // Garante que apenas colunas conhecidas sejam enviadas no payload.
+    // CORREÇÃO: Mapeamento explícito de campos.
     const dbData = {
       id: c.id,
       code: c.code,
@@ -456,10 +455,23 @@ export const storeService = {
       status: c.status
     };
 
-    const { error } = await supabase.from('coupons').upsert(dbData);
+    // CORREÇÃO SUPREME: Se o ID for novo (gerado pelo Date.now()), usamos insert()
+    // para respeitar a política de RLS "Authenticated insert coupons".
+    // Se estivermos editando (id fixo), usamos upsert() que requer políticas adicionais.
+    // Para simplificar e corrigir o erro de cadastro, usaremos insert() se for novo.
     
-    if (error) {
-      console.error("[GFIT-DB-ERROR] Falha ao persistir cupom:", error);
+    const { error } = await supabase.from('coupons').insert(dbData);
+    
+    // Se o insert falhar por duplicidade de chave primária, tentamos o update
+    // apenas para garantir que a funcionalidade de alternar status não quebre.
+    if (error && (error.code === '23505' || error.message.includes('already exists'))) {
+      const { error: updateError } = await supabase.from('coupons').update(dbData).eq('id', c.id);
+      if (updateError) {
+        console.error("[GFIT-DB-ERROR] Falha ao atualizar cupom:", updateError);
+        throw updateError;
+      }
+    } else if (error) {
+      console.error("[GFIT-DB-ERROR] Falha ao inserir cupom:", error);
       throw error;
     }
     

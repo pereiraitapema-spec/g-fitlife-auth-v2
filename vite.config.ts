@@ -2,14 +2,15 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-  // Carrega variáveis de ambiente de arquivos .env (local)
-  // O uso de '' como prefixo permite capturar variáveis do sistema sem o prefixo VITE_
-  const env = loadEnv(mode, (process as any).cwd(), '');
+  // Carrega variáveis de ambiente de arquivos .env (local) e do sistema (process.env)
+  // O prefixo '' permite capturar qualquer variável, independente de começar com VITE_
+  // Isso é crucial para o Railway onde as variáveis geralmente não têm prefixo VITE_
+  const env = loadEnv(mode, process.cwd(), '');
 
-  // Ordem de busca: 1. Variáveis reais do sistema (Node process.env) | 2. Arquivos .env | 3. Fallback vazio
-  const supabaseUrl = process.env.SUPABASE_URL || env.SUPABASE_URL || env.VITE_SUPABASE_URL || '';
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
-  const apiKey = process.env.API_KEY || env.API_KEY || '';
+  // Mapeamento de prioridade: 1. VITE_ do sistema | 2. Normal do sistema | 3. Fallback vazio
+  const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
+  const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+  const apiKey = env.API_KEY || process.env.API_KEY || '';
 
   return {
     plugins: [react()],
@@ -22,9 +23,11 @@ export default defineConfig(({ mode }) => {
       'process.env.SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
       'process.env.API_KEY': JSON.stringify(apiKey),
       
-      // Reforça o objeto import.meta.env para o padrão moderno do Vite
+      // Reforça o objeto import.meta.env para o padrão moderno do Vite, garantindo a substituição no bundle
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
+      'import.meta.env.SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'import.meta.env.SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
     },
     build: {
       outDir: 'dist',
