@@ -297,6 +297,7 @@ export const storeService = {
 
   async saveProduct(p: Product): Promise<void> {
     if (!supabase) return;
+    // Mapeamento explícito para as colunas do Supabase (snake_case)
     const dbData = {
       id: p.id,
       name: p.name,
@@ -316,9 +317,11 @@ export const storeService = {
       seller_id: p.sellerId || null,
       seo: p.seo || {}
     };
+
     const { error } = await supabase.from('products').upsert(dbData);
+    
     if (error) {
-      console.error("[GFIT-DB-ERROR] Erro ao salvar produto:", error);
+      console.error("[GFIT-DB-ERROR] Falha ao persistir produto:", error);
       throw error;
     }
     window.dispatchEvent(new Event('productsChanged'));
