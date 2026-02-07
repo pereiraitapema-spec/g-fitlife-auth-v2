@@ -398,17 +398,22 @@ export const storeService = {
   },
   async saveCategory(c: Category): Promise<void> { 
     if (!supabase) return;
-    // CORREÇÃO 400: Mapear campos para snake_case do banco
-    const dbData = {
+    
+    // CORREÇÃO: Enviar apenas o mapeamento snake_case básico para evitar erro 400
+    // se colunas opcionais ainda não existirem no cache do esquema.
+    const dbData: any = {
       id: c.id,
       name: c.name,
       department_id: c.departmentId,
-      status: c.status,
-      slug: c.slug || null,
-      icon: c.icon || null,
-      description: c.description || null,
-      seo: c.seo || {}
+      status: c.status
     };
+
+    // Adiciona opcionais apenas se existirem no objeto, prevenindo erro PGRST204
+    if (c.slug) dbData.slug = c.slug;
+    if (c.icon) dbData.icon = c.icon;
+    if (c.description) dbData.description = c.description;
+    if (c.seo) dbData.seo = c.seo;
+
     const { error } = await supabase.from('categories').upsert(dbData);
     if (error) {
       console.error("[GFIT-DB-ERROR] Falha ao salvar categoria:", error);
