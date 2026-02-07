@@ -1,25 +1,15 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * GFITLIFE SUPABASE CLIENT - UNIFIED
- * Este arquivo é compartilhado entre o build do Vite e o runtime do Node.js.
+ * GFITLIFE SUPABASE CLIENT - PRODUCTION READY
+ * Este arquivo é compartilhado entre o frontend (Vite) e o backend (Node.js).
+ * O Vite substitui referências literais a 'process.env.VITE_...' por strings durante o build.
  */
 
-// 1. Tenta obter via literal process.env (que o Vite substitui no build)
-// 2. Tenta obter via objeto process global (se estiver no Node.js)
-const getEnv = (key) => {
-  try {
-    // Se o Vite substituiu, será uma string. Se não, tenta acessar o objeto.
-    const val = process.env[key];
-    return (val && val !== "") ? val : undefined;
-  } catch (e) {
-    return undefined;
-  }
-};
-
-const supabaseUrl = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL');
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANON_KEY');
+// Acesso simplificado para garantir a substituição estática do Vite no frontend
+// e o acesso direto ao process.env no backend (Node.js).
+const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 
 export const supabase = (supabaseUrl && supabaseAnonKey) 
   ? createClient(supabaseUrl, supabaseAnonKey) 
@@ -28,11 +18,12 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
 if (supabase) {
   try {
     const host = new URL(supabaseUrl).hostname;
-    console.log(`[GFIT-SYSTEM] Conexão Supabase Ativa: ${host}`);
+    console.log(`[GFIT-SYSTEM] Supabase inicializado: ${host}`);
   } catch (e) {
-    console.log(`[GFIT-SYSTEM] Conexão Supabase Inicializada.`);
+    console.log(`[GFIT-SYSTEM] Supabase inicializado.`);
   }
 } else {
-  // Log silencioso no console para depuração, sem travar o carregamento inicial da UI
-  console.warn("[GFIT-ERROR] Credenciais do Supabase ausentes. Verifique o painel do Railway.");
+  // Log de erro crítico para diagnóstico no painel do Railway
+  console.error("[GFIT-ERROR] Credenciais do Supabase ausentes no bundle do cliente.");
+  console.warn("[GFIT-TIP] Certifique-se de que VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY estão configuradas no Railway.");
 }
