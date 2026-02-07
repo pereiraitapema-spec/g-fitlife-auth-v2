@@ -2,22 +2,11 @@ import { createClient } from '@supabase/supabase-js';
 
 /**
  * SUPABASE CLIENT - G-FITLIFE
- * Este arquivo centraliza a conexão com o banco de dados.
- * As variáveis devem ser prefixadas com VITE_ para o frontend ou estar no process.env para o backend.
+ * O Vite exige referências estáticas a import.meta.env para substituição no bundle.
  */
 
-// Acesso direto para permitir substituição estática pelo Vite.
-// Não utilize encadeamento opcional ou verificações complexas aqui, 
-// pois o Vite precisa identificar a string exata para substituição durante o build.
-const url = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || 
-            (typeof process !== 'undefined' && process.env && process.env.VITE_SUPABASE_URL) || 
-            (typeof process !== 'undefined' && process.env && process.env.SUPABASE_URL) || 
-            '';
-
-const key = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) || 
-            (typeof process !== 'undefined' && process.env && process.env.VITE_SUPABASE_ANON_KEY) || 
-            (typeof process !== 'undefined' && process.env && process.env.SUPABASE_ANON_KEY) || 
-            '';
+const url = import.meta.env.VITE_SUPABASE_URL || '';
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 // Inicializa o cliente apenas se tivermos as credenciais
 export const supabase = (url && key) ? createClient(url, key) : null;
@@ -28,6 +17,6 @@ if (typeof window !== 'undefined') {
     console.log("[GFIT-SYSTEM] Supabase inicializado com sucesso.");
   } else {
     console.error("[GFIT-ERROR] Credenciais do Supabase ausentes no bundle do cliente.");
-    console.warn("[GFIT-TIP] Certifique-se de que VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY estão configuradas no ambiente de build do Railway.");
+    console.warn("[GFIT-TIP] Verifique se VITE_SUPABASE_URL está nas variáveis do Railway.");
   }
 }
