@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import HeaderSimple from './components/HeaderSimple';
@@ -127,7 +128,8 @@ const App: React.FC = () => {
         if (profile.status === UserStatus.ACTIVE) {
           const newSession = storeService.createSession(profile);
           setSession(newSession);
-          if (!isResetPasswordView) {
+          // Prevenimos redirecionamentos se estivermos no fluxo de recuperação
+          if (!isResetPasswordView && window.location.hash.indexOf('type=recovery') === -1) {
              if (profile.isDefaultPassword) setMustChangePassword(true);
              else handleRoleLanding(profile.role);
           }
@@ -148,19 +150,25 @@ const App: React.FC = () => {
     init();
 
     if (supabase) {
-      supabase.auth.onAuthStateChange((event) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') syncAuth();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          syncAuth();
+        }
         if (event === 'PASSWORD_RECOVERY') {
+          console.log('[GFIT-AUTH] Fluxo de Recuperação Detectado.');
           setIsResetPasswordView(true);
-          setCurrentRoute('reset-password'); // Direciona para a nova rota profissional
+          setCurrentRoute('reset-password');
         }
         if (event === 'SIGNED_OUT') {
            setSession(null);
            setIsResetPasswordView(false);
+           setMustChangePassword(false);
         }
       });
+
+      return () => subscription.unsubscribe();
     }
-  }, [isResetPasswordView]);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,7 +204,7 @@ const App: React.FC = () => {
         storeService.logout();
         setSession(null);
         setViewMode('admin');
-        setCurrentRoute('public-home'); // Reset de rota para segurança
+        setCurrentRoute('public-home');
         triggerFeedback('Senha alterada com sucesso');
       } else {
         triggerFeedback(res.error || 'Erro na atualização.', 'error');
@@ -210,10 +218,7 @@ const App: React.FC = () => {
     if (e) e.preventDefault();
     
     const email = loginEmail.trim().toLowerCase();
-    console.log('[GFIT-AUTH] Iniciando tentativa de recuperação para:', email);
-
     if (!email || !email.includes('@')) {
-      console.warn('[GFIT-AUTH] E-mail inválido ignorado.');
       triggerFeedback('Por favor, informe um e-mail válido.', 'error');
       return;
     }
@@ -222,19 +227,14 @@ const App: React.FC = () => {
     setIsLoggingIn(true);
     
     try {
-      console.log('[GFIT-AUTH] Chamando storeService.recoverPassword...');
       const res = await storeService.recoverPassword(email);
-      
       if (res.success) {
-        console.log('[GFIT-AUTH] Sucesso: Link enviado via Supabase para:', email);
         triggerFeedback('Link de recuperação enviado. Verifique seu email.', 'success');
         setIsRecoveryMode(false);
       } else {
-        console.error('[GFIT-AUTH] Falha no envio:', res.error);
         throw new Error(res.error);
       }
     } catch (err: any) {
-      console.error('[GFIT-AUTH] Erro ao disparar recuperação:', err);
       triggerFeedback(err.message || 'Erro ao enviar link de recuperação', 'error');
     } finally {
       setIsLoggingIn(false);
@@ -258,13 +258,28 @@ const App: React.FC = () => {
 
   if (!isSystemReady) return <div className="h-screen bg-slate-900 flex items-center justify-center animate-pulse text-white font-black text-4xl">G</div>;
 
-  // View Especial de Redefinição de Senha via Nova Página/Componente
+  const renderFeedback = () => feedback && (
+    <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[1000] animate-in slide-in-from-top-10 duration-300">
+      <div className={`px-12 py-5 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest ${feedback.type === 'error' ? 'bg-red-900 border-red-500' : 'bg-slate-900'}`}>
+        {feedback.message}
+      </div>
+    </div>
+  );
+
+  // View Especial de Redefinição de Senha
   if (currentRoute === 'reset-password' || isResetPasswordView) {
     return (
-      <ResetPasswordPage 
-        onSuccess={() => handleLogout()} 
-        onCancel={() => handleLogout()} 
-      />
+      <>
+        {renderFeedback()}
+        <ResetPasswordPage 
+          onSuccess={() => {
+            triggerFeedback('Sua senha foi redefinida! Faça login agora.', 'success');
+            handleLogout();
+          }} 
+          onCancel={() => handleLogout()} 
+          triggerFeedback={triggerFeedback}
+        />
+      </>
     );
   }
 
@@ -272,6 +287,7 @@ const App: React.FC = () => {
   if (viewMode === 'admin' && !session) {
     return (
       <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
+        {renderFeedback()}
         <div className="w-full max-w-md bg-white rounded-[60px] p-12 shadow-2xl text-center space-y-6">
             <div className="w-20 h-20 bg-emerald-500 rounded-[30px] flex items-center justify-center text-white text-4xl font-black mx-auto shadow-2xl">G</div>
             <h1 className="text-3xl font-black text-slate-900 uppercase">G-Fit Login</h1>
@@ -331,13 +347,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden relative">
-      {feedback && (
-        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[500] animate-in slide-in-from-top-10 duration-300">
-          <div className={`px-12 py-5 border border-emerald-500 text-white rounded-[50px] shadow-2xl font-black text-[10px] uppercase tracking-widest ${feedback.type === 'error' ? 'bg-red-900 border-red-500' : 'bg-slate-900'}`}>
-            {feedback.message}
-          </div>
-        </div>
-      )}
+      {renderFeedback()}
 
       {viewMode === 'store' ? (
         <div className="min-h-screen bg-white flex flex-col relative w-full overflow-y-auto custom-scrollbar">

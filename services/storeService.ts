@@ -64,10 +64,8 @@ export const storeService = {
 
   /**
    * RECUPERAÇÃO DE SENHA (FORGOT PASSWORD)
-   * CORREÇÃO: Redirecionando para a raiz (window.location.origin).
-   * O redirecionamento via Supabase anexará o token de hash (#).
-   * O listener onAuthStateChange no App.tsx detectará o evento 'PASSWORD_RECOVERY'
-   * e abrirá a tela de definição de nova senha automaticamente.
+   * CORREÇÃO: Adicionada a barra final (/) ao origin.
+   * Supabase exige que a URL de redirecionamento seja idêntica à cadastrada na whitelist do Dashboard.
    */
   async recoverPassword(email: string) {
     if (!supabase) {
@@ -76,11 +74,15 @@ export const storeService = {
     }
     
     const cleanEmail = email.trim().toLowerCase();
-    // Forçamos o redirectTo para a base da URL para evitar problemas de whitelist no Supabase
-    const redirectUrl = window.location.origin;
+    
+    // O Supabase requer que a URL de redirecionamento esteja na whitelist. 
+    // Muitas vezes o Dashboard está configurado com a barra final (trailing slash).
+    const redirectUrl = window.location.origin.endsWith('/') 
+      ? window.location.origin 
+      : window.location.origin + '/';
     
     console.log('[SUPABASE-DEBUG] Solicitando reset para:', cleanEmail);
-    console.log('[SUPABASE-DEBUG] URL de retorno:', redirectUrl);
+    console.log('[SUPABASE-DEBUG] URL de retorno formatada:', redirectUrl);
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
@@ -129,7 +131,7 @@ export const storeService = {
             full_name: name,
             is_master: isMasterRequest
           },
-          emailRedirectTo: window.location.origin
+          emailRedirectTo: window.location.origin + '/'
         }
       });
 
@@ -151,7 +153,7 @@ export const storeService = {
       type: 'signup',
       email: email.trim().toLowerCase(),
       options: {
-        emailRedirectTo: window.location.origin
+        emailRedirectTo: window.location.origin + '/'
       }
     });
     if (error) return { success: false, error: error.message };
@@ -163,7 +165,7 @@ export const storeService = {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin }
+        options: { redirectTo: window.location.origin + '/' }
       });
       if (error) throw error;
       return { success: true };
