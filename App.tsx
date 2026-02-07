@@ -368,7 +368,7 @@ const App: React.FC = () => {
                            <div className="flex items-baseline gap-4">
                              <span className="text-5xl font-black text-slate-900">R$ {selectedProduct.price.toFixed(2)}</span>
                              {selectedProduct.originalPrice && (
-                               <span className="text-2xl text-slate-400 line-through">R$ {selectedProduct.originalProductPrice.toFixed(2)}</span>
+                               <span className="text-2xl text-slate-400 line-through">R$ {selectedProduct.originalPrice.toFixed(2)}</span>
                              )}
                            </div>
                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg w-fit">Disponível em estoque - Envio Imediato</p>

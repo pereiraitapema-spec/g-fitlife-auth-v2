@@ -162,6 +162,7 @@ export interface Coupon {
   type: CouponType;
   value: number;
   status: 'active' | 'inactive';
+  expiresAt?: string;
 }
 
 export interface Affiliate {

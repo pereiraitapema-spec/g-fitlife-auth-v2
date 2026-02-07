@@ -416,16 +416,44 @@ export const storeService = {
 
   async getBanners(): Promise<Banner[]> {
     if (!supabase) return [];
-    const { data } = await supabase.from('banners').select('*').order('id');
-    return data || [];
+    const { data } = await supabase.from('banners').select('*').order('created_at', { ascending: false });
+    return (data || []).map(b => ({
+      id: b.id,
+      title: b.title,
+      imageUrl: b.image_url,
+      linkType: b.link_type,
+      targetId: b.target_id,
+      status: b.status,
+      startDate: b.start_date,
+      endDate: b.end_date
+    }));
   },
   async saveBanner(banner: Banner): Promise<void> {
     if (!supabase) return;
-    await supabase.from('banners').upsert({
-      id: banner.id, title: banner.title, image_url: banner.imageUrl, 
-      link_type: banner.linkType, target_id: banner.targetId, status: banner.status,
-      start_date: banner.startDate, end_date: banner.endDate
-    });
+    
+    // LIMPEZA DE DADOS PARA EVITAR ERRO 400
+    // PostgREST falha ao receber "" em colunas TIMESTAMPTZ ou UUID
+    const dbData: any = {
+      title: banner.title || 'Sem título',
+      image_url: banner.imageUrl || null,
+      link_type: banner.linkType || 'product',
+      target_id: banner.targetId || null,
+      status: banner.status || 'active',
+      start_date: (banner.startDate && banner.startDate.trim() !== '') ? banner.startDate : null,
+      end_date: (banner.endDate && banner.endDate.trim() !== '') ? banner.endDate : null
+    };
+
+    // Somente envia o ID se ele for um UUID válido (não vazio)
+    if (banner.id && banner.id.trim() !== '') {
+      dbData.id = banner.id;
+    }
+
+    const { error } = await supabase.from('banners').upsert(dbData);
+    if (error) {
+      console.error("[GFIT-DB-ERROR] Erro 400 ao persistir banner. Payload enviado:", dbData);
+      console.error("Mensagem do servidor:", error.message);
+      throw error;
+    }
     window.dispatchEvent(new Event('bannersChanged'));
   },
   async getCoupons(): Promise<Coupon[]> { 
@@ -436,26 +464,27 @@ export const storeService = {
       code: c.code,
       type: c.type,
       value: c.discount, // Mapeado de discount para value no front
-      status: c.active ? 'active' : 'inactive'
+      status: c.active ? 'active' : 'inactive',
+      expiresAt: c.expires_at
     }));
   },
   async saveCoupon(c: Coupon): Promise<void> { 
     if (!supabase) return;
     
-    // Mapeamento corrigido conforme colunas informadas pelo usuário
+    // Mapeamento corrigido conforme colunas informadas pelo usuário e data de expiração real
     const dbData: any = {
       id: c.id,
       code: c.code,
       type: c.type,
-      discount: c.value || 0, // Corrigido de value para discount
-      active: c.status === 'active', // Corrigido de status para active (bool)
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // Default 30 dias
+      discount: c.value || 0, // Mapeado de value para discount
+      active: c.status === 'active', // Mapeado de status para active (bool)
+      expires_at: c.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     };
 
     const { error } = await supabase.from('coupons').upsert(dbData);
     
     if (error) {
-      console.error("[GFIT-DB-ERROR] Falha ao persistir cupom:", error);
+      console.error("[GFIT-DB-ERROR] Falha ao persistir cupom no Supabase:", error);
       throw error;
     }
     window.dispatchEvent(new Event('couponsChanged'));

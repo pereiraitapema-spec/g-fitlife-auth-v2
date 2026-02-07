@@ -11,30 +11,48 @@ const MarketingBanners: React.FC = () => {
     title: '', imageUrl: '', linkType: 'product', targetId: '', status: 'active', startDate: '', endDate: ''
   });
 
+  const loadData = async () => {
+    const data = await storeService.getBanners();
+    setBanners(data);
+  };
+
   useEffect(() => {
-    const load = async () => {
-      const data = await storeService.getBanners();
-      setBanners(data);
-    };
-    load();
+    loadData();
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+    
+    // Validação mínima
+    if (!formData.imageUrl) {
+        alert("Por favor, selecione uma imagem para o banner.");
+        return;
+    }
+
     setIsSubmitting(true);
     try {
+      // GARANTIR UUID VÁLIDO: Se não houver ID (novo registro), gera um UUID
+      // Se formData.id for "" (string vazia), o fallback será usado
+      const finalId = (formData.id && formData.id.trim() !== "") ? formData.id : crypto.randomUUID();
+      
       const newBanner = {
         ...formData,
-        id: formData.id || 'BAN-' + Date.now()
+        id: finalId
       } as Banner;
+      
+      console.log("[GFIT-DEBUG] Tentando persistir banner:", newBanner);
+      
       await storeService.saveBanner(newBanner);
-      const data = await storeService.getBanners();
-      setBanners(data);
+      await loadData();
       setIsModalOpen(false);
+      
+      // Limpeza completa do estado
       setFormData({ title: '', imageUrl: '', linkType: 'product', targetId: '', status: 'active', startDate: '', endDate: '' });
-    } catch (error) {
-      console.error("Erro ao salvar banner", error);
+      alert("Banner salvo com sucesso!");
+    } catch (error: any) {
+      console.error("[GFIT-UI-ERROR] Erro ao salvar banner:", error);
+      alert("Falha ao salvar banner no banco de dados. Verifique os dados e tente novamente.");
     } finally {
       setIsSubmitting(false);
     }
@@ -49,7 +67,10 @@ const MarketingBanners: React.FC = () => {
         </div>
         <button 
           disabled={isSubmitting}
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setFormData({ title: '', imageUrl: '', linkType: 'product', targetId: '', status: 'active', startDate: '', endDate: '' });
+            setIsModalOpen(true);
+          }}
           className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black shadow-2xl hover:bg-emerald-500 transition-all disabled:opacity-50"
         >
           + NOVO BANNER
@@ -72,12 +93,12 @@ const MarketingBanners: React.FC = () => {
             <div className="p-8">
               <h3 className="text-xl font-black text-slate-900 mb-2">{banner.title}</h3>
               <div className="flex items-center gap-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-50 pb-6 mb-6">
-                <span>Início: {banner.startDate}</span>
-                <span>Fim: {banner.endDate}</span>
+                <span>Início: {banner.startDate ? new Date(banner.startDate).toLocaleDateString() : 'Imediato'}</span>
+                <span>Fim: {banner.endDate ? new Date(banner.endDate).toLocaleDateString() : 'Indeterminado'}</span>
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex gap-2">
-                  <span className="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 uppercase">{banner.linkType}: {banner.targetId}</span>
+                  <span className="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 uppercase">{banner.linkType}: {banner.targetId || 'Home'}</span>
                 </div>
                 <button 
                   disabled={isSubmitting}
@@ -94,34 +115,51 @@ const MarketingBanners: React.FC = () => {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-xl rounded-[50px] shadow-2xl p-10 animate-in zoom-in-95">
-            <h3 className="text-2xl font-black mb-8">Configurar Banner</h3>
+          <div className="bg-white w-full max-w-xl rounded-[50px] shadow-2xl p-10 animate-in zoom-in-95 overflow-y-auto max-h-[90vh]">
+            <h3 className="text-2xl font-black mb-8 uppercase tracking-tight">{formData.id ? 'Editar' : 'Configurar'} Banner</h3>
             <form onSubmit={handleSave} className="space-y-6">
-              <input required disabled={isSubmitting} placeholder="Título da Campanha" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Título Interno</label>
+                <input required disabled={isSubmitting} placeholder="Campanha Verão 2026" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold shadow-inner" />
+              </div>
               
               <FileUpload 
-                label="Imagem do Banner" 
+                label="Mídia do Banner (Ideal 1920x800)" 
                 currentUrl={formData.imageUrl || ''} 
                 onUploadComplete={(url) => setFormData({...formData, imageUrl: url})} 
               />
 
               <div className="grid grid-cols-2 gap-4">
-                <select disabled={isSubmitting} value={formData.linkType} onChange={e => setFormData({...formData, linkType: e.target.value as any})} className="bg-slate-50 rounded-2xl p-5 outline-none font-bold">
-                  <option value="product">Produto</option>
-                  <option value="category">Categoria</option>
-                  <option value="external">Link Externo</option>
-                </select>
-                <input disabled={isSubmitting} placeholder="ID Alvo" value={formData.targetId} onChange={e => setFormData({...formData, targetId: e.target.value})} className="bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tipo de Link</label>
+                  <select disabled={isSubmitting} value={formData.linkType} onChange={e => setFormData({...formData, linkType: e.target.value as any})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold">
+                    <option value="product">Produto</option>
+                    <option value="category">Categoria</option>
+                    <option value="external">Link Externo</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">ID Alvo / URL</label>
+                  <input disabled={isSubmitting} placeholder="Ex: p1 ou whey-pro" value={formData.targetId} onChange={e => setFormData({...formData, targetId: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold shadow-inner" />
+                </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <input disabled={isSubmitting} type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} className="bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
-                <input disabled={isSubmitting} type="date" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} className="bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Início Exibição</label>
+                  <input disabled={isSubmitting} type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Fim Exibição</label>
+                  <input disabled={isSubmitting} type="date" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+                </div>
               </div>
+
               <div className="flex gap-4 pt-4">
-                <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black hover:bg-emerald-500 transition-all disabled:opacity-50">
-                  {isSubmitting ? 'SINCRONIZANDO...' : 'SALVAR NO BACKEND'}
+                <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs hover:bg-emerald-500 transition-all disabled:opacity-50">
+                  {isSubmitting ? 'SINCRONIZANDO...' : 'SALVAR NO SUPABASE'}
                 </button>
-                <button type="button" disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold">CANCELAR</button>
+                <button type="button" disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold uppercase text-xs">CANCELAR</button>
               </div>
             </form>
           </div>

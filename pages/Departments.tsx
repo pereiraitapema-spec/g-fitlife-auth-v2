@@ -42,7 +42,8 @@ const Departments: React.FC = () => {
     setIsSubmitting(true);
     try {
       const deptData: Department = {
-        id: editId || 'dept-' + Date.now(),
+        // CORREÇÃO: Usar UUID para novos registros
+        id: editId || crypto.randomUUID(),
         name: formData.name,
         status: formData.status as any
       };
@@ -84,7 +85,7 @@ const Departments: React.FC = () => {
       <div className="flex justify-between items-end px-4">
         <div>
           <h2 className="text-2xl font-black text-slate-900 uppercase">Departamentos</h2>
-          <p className="text-slate-500">Persistência segura em IndexedDB.</p>
+          <p className="text-slate-500">Persistência segura em Supabase Cloud.</p>
         </div>
         <button 
           disabled={isSubmitting}
