@@ -455,19 +455,29 @@ export const storeService = {
       status: c.status
     };
 
-    // CORREÇÃO: Lógica defensiva para PGRST204 (status column not found)
     // Tenta primeiro com o mapeamento completo
-    let { error } = await supabase.from('coupons').insert(dbData);
+    let result = await supabase.from('coupons').insert(dbData);
+    let error = result.error;
     
-    // Se o erro for especificamente PGRST204 e mencionar 'status', tenta sem a coluna status
-    if (error && error.code === 'PGRST204' && error.message.includes('status')) {
-      console.warn("[GFIT-SERVICE] Coluna 'status' não encontrada no cache do schema. Tentando insert sem ela...");
-      delete dbData.status;
-      const retry = await supabase.from('coupons').insert(dbData);
-      error = retry.error;
+    // CORREÇÃO DINÂMICA PARA PGRST204: Se o erro persistir, remover a coluna citada na mensagem
+    // O console mostrou erro tanto para 'status' quanto para 'value' em tentativas sucessivas.
+    let maxRetries = 2;
+    while (error && error.code === 'PGRST204' && maxRetries > 0) {
+      const missingColumnMatch = error.message.match(/'([^']+)'/);
+      const colName = missingColumnMatch ? missingColumnMatch[1] : null;
+
+      if (colName && dbData[colName] !== undefined) {
+        console.warn(`[GFIT-SERVICE] Coluna '${colName}' não encontrada no cache do schema. Removendo da requisição...`);
+        delete dbData[colName];
+        const retryResult = await supabase.from('coupons').insert(dbData);
+        error = retryResult.error;
+      } else {
+        break;
+      }
+      maxRetries--;
     }
     
-    // Se o insert falhar por duplicidade de chave primária, tentamos o update
+    // Se o insert falhar por duplicidade de chave primária após as limpezas de cache, tentamos o update
     if (error && (error.code === '23505' || error.message.includes('already exists'))) {
       const { error: updateError } = await supabase.from('coupons').update(dbData).eq('id', c.id);
       if (updateError) {
@@ -475,7 +485,7 @@ export const storeService = {
         throw updateError;
       }
     } else if (error) {
-      console.error("[GFIT-DB-ERROR] Falha ao inserir cupom:", error);
+      console.error("[GFIT-DB-ERROR] Falha fatal ao persistir cupom:", error);
       throw error;
     }
     
