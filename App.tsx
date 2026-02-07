@@ -128,10 +128,19 @@ const App: React.FC = () => {
         if (profile.status === UserStatus.ACTIVE) {
           const newSession = storeService.createSession(profile);
           setSession(newSession);
-          // Prevenimos redirecionamentos se estivermos no fluxo de recuperação
-          if (!isResetPasswordView && window.location.hash.indexOf('type=recovery') === -1) {
+
+          // CRÍTICO: Verificamos se há um hash de recuperação ANTES de qualquer redirecionamento
+          const hasRecoveryHash = window.location.hash.includes('type=recovery') || 
+                                 window.location.hash.includes('type=invite') ||
+                                 window.location.hash.includes('type=magiclink');
+
+          if (!isResetPasswordView && !hasRecoveryHash) {
              if (profile.isDefaultPassword) setMustChangePassword(true);
              else handleRoleLanding(profile.role);
+          } else if (hasRecoveryHash) {
+             // Forçamos a rota de redefinição se o token estiver presente
+             setIsResetPasswordView(true);
+             setCurrentRoute('reset-password');
           }
         } else {
           setAuthError('Conta inativa.');
@@ -144,18 +153,29 @@ const App: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       await storeService.initializeSystem();
+      
+      // Detecção prévia de hash de recuperação para evitar flashes de outras telas
+      if (window.location.hash.includes('type=recovery') || 
+          window.location.hash.includes('type=invite') ||
+          window.location.hash.includes('type=magiclink')) {
+        setIsResetPasswordView(true);
+        setCurrentRoute('reset-password');
+      }
+
       await syncAuth();
       setIsSystemReady(true);
     };
     init();
 
     if (supabase) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        console.log(`[GFIT-AUTH] Evento: ${event}`);
+        
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           syncAuth();
         }
         if (event === 'PASSWORD_RECOVERY') {
-          console.log('[GFIT-AUTH] Fluxo de Recuperação Detectado.');
+          console.log('[GFIT-AUTH] Fluxo de Recuperação Detectado via Evento.');
           setIsResetPasswordView(true);
           setCurrentRoute('reset-password');
         }
@@ -203,9 +223,9 @@ const App: React.FC = () => {
         setIsResetPasswordView(false);
         storeService.logout();
         setSession(null);
-        setViewMode('admin');
+        setViewMode('store');
         setCurrentRoute('public-home');
-        triggerFeedback('Senha alterada com sucesso');
+        triggerFeedback('Senha alterada com sucesso! Faça login novamente.');
       } else {
         triggerFeedback(res.error || 'Erro na atualização.', 'error');
       }
