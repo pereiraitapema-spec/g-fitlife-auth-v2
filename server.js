@@ -1,3 +1,4 @@
+
 import express from 'express';
 import path from 'path';
 import cors from 'cors';
@@ -66,13 +67,16 @@ app.post('/auth/register', async (req, res) => {
 });
 
 /**
- * ROTA DE RECUPERAÇÃO DE SENHA
+ * ROTA DE RECUPERAÇÃO DE SENHA (BACKEND)
+ * Ajustada para remover barra final da URL de redirecionamento.
  */
 app.post('/auth/recover', async (req, res) => {
   const { email } = req.body;
+  const baseUrl = (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, "");
+  
   try {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.APP_URL || 'http://localhost:5173'}/`
+      redirectTo: baseUrl
     });
     if (error) return res.status(400).json({ success: false, error: error.message });
     return res.json({ success: true });
@@ -85,8 +89,7 @@ app.post('/auth/recover', async (req, res) => {
  * ROTA DE ATUALIZAÇÃO DE SENHA
  */
 app.post('/auth/update-password', async (req, res) => {
-  const { password, token } = req.body;
-  // Nota: O Supabase lida com o token automaticamente se o usuário vier do link de email
+  const { password } = req.body;
   try {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) return res.status(400).json({ success: false, error: error.message });

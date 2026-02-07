@@ -1,3 +1,4 @@
+
 import { 
   Order, Lead, Product, Coupon, OrderStatus, 
   AppUser, SystemSettings, UserRole, UserStatus, 
@@ -64,25 +65,21 @@ export const storeService = {
 
   /**
    * RECUPERAÇÃO DE SENHA (FORGOT PASSWORD)
-   * CORREÇÃO: Adicionada a barra final (/) ao origin.
-   * Supabase exige que a URL de redirecionamento seja idêntica à cadastrada na whitelist do Dashboard.
+   * CORREÇÃO DEFINITIVA: Força a remoção de barra final para evitar bloqueio por URL mismatch.
    */
   async recoverPassword(email: string) {
     if (!supabase) {
-      console.error('[SUPABASE-DEBUG] Tentativa de recuperação falhou: Supabase não inicializado.');
+      console.error('[SUPABASE-DEBUG] Supabase não inicializado.');
       return { success: false, error: 'Offline' };
     }
     
     const cleanEmail = email.trim().toLowerCase();
     
-    // O Supabase requer que a URL de redirecionamento esteja na whitelist. 
-    // Muitas vezes o Dashboard está configurado com a barra final (trailing slash).
-    const redirectUrl = window.location.origin.endsWith('/') 
-      ? window.location.origin 
-      : window.location.origin + '/';
+    // window.location.origin geralmente não tem barra, mas o replace(/\/$/, "") garante 100% de segurança
+    const redirectUrl = window.location.origin.replace(/\/$/, "");
     
     console.log('[SUPABASE-DEBUG] Solicitando reset para:', cleanEmail);
-    console.log('[SUPABASE-DEBUG] URL de retorno formatada:', redirectUrl);
+    console.log('[SUPABASE-DEBUG] URL de retorno higienizada:', redirectUrl);
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
@@ -90,14 +87,14 @@ export const storeService = {
       });
       
       if (error) {
-        console.error('[SUPABASE-DEBUG] Erro do Supabase:', error);
-        throw error;
+        console.error('[SUPABASE-DEBUG] Erro API Supabase:', error.message);
+        return { success: false, error: error.message };
       }
       
       return { success: true };
     } catch (err: any) {
-      console.error('[SUPABASE-DEBUG] Falha no envio:', err);
-      return { success: false, error: err.message };
+      console.error('[SUPABASE-DEBUG] Falha de Execução:', err);
+      return { success: false, error: err.message || 'Erro ao processar e-mail.' };
     }
   },
 
@@ -131,7 +128,7 @@ export const storeService = {
             full_name: name,
             is_master: isMasterRequest
           },
-          emailRedirectTo: window.location.origin + '/'
+          emailRedirectTo: window.location.origin.replace(/\/$/, "")
         }
       });
 
@@ -153,7 +150,7 @@ export const storeService = {
       type: 'signup',
       email: email.trim().toLowerCase(),
       options: {
-        emailRedirectTo: window.location.origin + '/'
+        emailRedirectTo: window.location.origin.replace(/\/$/, "")
       }
     });
     if (error) return { success: false, error: error.message };
@@ -165,7 +162,7 @@ export const storeService = {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin + '/' }
+        options: { redirectTo: window.location.origin.replace(/\/$/, "") }
       });
       if (error) throw error;
       return { success: true };

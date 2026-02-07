@@ -1,22 +1,36 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * GFITLIFE SUPABASE CLIENT
- * Configuração unificada para Vite (Browser) e Node.js (Servidor).
- * O Vite substitui as referências a process.env no momento do build através da configuração 'define'.
+ * GFITLIFE SUPABASE CLIENT - UNIFIED
+ * Este arquivo é compartilhado entre o build do Vite e o runtime do Node.js.
  */
 
-// Chaves obtidas do ambiente através do padrão process.env injetado pelo Vite ou nativo do Node.
-// Incluímos as chaves fornecidas no MASTER PROMPT como fallbacks para garantir a resiliência da infraestrutura.
-const supabaseUrl = process.env.SUPABASE_URL || 'https://uczbvmemoixmannnfvak.supabase.co';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'sb_publishable_JOdFLDToPSEJq3Xjtk9jbg_lZel8OR_';
+// No navegador, as variáveis são substituídas pelo Vite através do 'define' no vite.config.ts
+// No Node.js, elas vêm do process.env real.
+// Usamos uma verificação segura para evitar "ReferenceError: process is not defined" no browser.
+
+const getEnv = (key) => {
+  try {
+    // Tenta acessar via process.env (substituído pelo Vite no build ou nativo no Node)
+    return process.env[key];
+  } catch (e) {
+    return "";
+  }
+};
+
+const supabaseUrl = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL');
+const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANON_KEY');
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn("[GFIT-ERROR] Credenciais do Supabase ausentes no ambiente atual.");
+}
 
 export const supabase = (supabaseUrl && supabaseAnonKey) 
   ? createClient(supabaseUrl, supabaseAnonKey) 
   : null;
 
-if (!supabase) {
-  console.warn("[GFIT-INFRA] Supabase não pôde ser inicializado. Verifique se as variáveis SUPABASE_URL e SUPABASE_ANON_KEY estão configuradas corretamente.");
-} else {
-  console.log("[GFIT-SYSTEM] Supabase Cloud Infra Ativa e Sincronizada.");
+if (supabase) {
+  const host = new URL(supabaseUrl).hostname;
+  console.log(`[GFIT-SYSTEM] Conexão Supabase Estabelecida: ${host}`);
 }
