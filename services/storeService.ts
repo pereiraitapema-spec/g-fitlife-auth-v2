@@ -65,8 +65,9 @@ export const storeService = {
   /**
    * RECUPERAÇÃO DE SENHA (FORGOT PASSWORD)
    * CORREÇÃO: Redirecionando para a raiz (window.location.origin).
+   * O redirecionamento via Supabase anexará o token de hash (#).
    * O listener onAuthStateChange no App.tsx detectará o evento 'PASSWORD_RECOVERY'
-   * e redirecionará internamente para a tela de nova senha.
+   * e abrirá a tela de definição de nova senha automaticamente.
    */
   async recoverPassword(email: string) {
     if (!supabase) {
@@ -75,11 +76,11 @@ export const storeService = {
     }
     
     const cleanEmail = email.trim().toLowerCase();
-    // Usar apenas o origin garante que a URL esteja na whitelist principal do Supabase
+    // Forçamos o redirectTo para a base da URL para evitar problemas de whitelist no Supabase
     const redirectUrl = window.location.origin;
     
     console.log('[SUPABASE-DEBUG] Solicitando reset para:', cleanEmail);
-    console.log('[SUPABASE-DEBUG] Redirecionamento configurado para o Site URL:', redirectUrl);
+    console.log('[SUPABASE-DEBUG] URL de retorno:', redirectUrl);
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
@@ -87,21 +88,17 @@ export const storeService = {
       });
       
       if (error) {
-        console.error('[SUPABASE-DEBUG] Erro retornado pelo Supabase:', error);
+        console.error('[SUPABASE-DEBUG] Erro do Supabase:', error);
         throw error;
       }
       
-      console.log('[SUPABASE-DEBUG] Solicitação enviada com sucesso para a fila de e-mail do Supabase.');
       return { success: true };
     } catch (err: any) {
-      console.error('[SUPABASE-DEBUG] Erro no fluxo de recuperação:', err);
+      console.error('[SUPABASE-DEBUG] Falha no envio:', err);
       return { success: false, error: err.message };
     }
   },
 
-  /**
-   * ATUALIZAÇÃO DE SENHA (Obrigatório em recuperação ou primeiro acesso)
-   */
   async updatePassword(newPass: string) {
     if (!supabase) return { success: false, error: 'Supabase Offline' };
     try {
@@ -253,7 +250,6 @@ export const storeService = {
     window.dispatchEvent(new Event('sessionUpdated'));
   },
 
-  // AFFILIATE TRACKING LINKS
   async generateTrackingLink(affiliateId: string, productId: string) {
     if (!supabase) return { success: false, error: 'Offline' };
     try {
@@ -281,7 +277,6 @@ export const storeService = {
     return data || [];
   },
 
-  // CORE DATA
   async getSettings(): Promise<SystemSettings> {
     if (supabase) {
       const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').maybeSingle();
