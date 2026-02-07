@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { Banner } from '../types';
 import { storeService } from '../services/storeService';
+import FileUpload from '../components/FileUpload';
 
 const MarketingBanners: React.FC = () => {
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -98,7 +98,13 @@ const MarketingBanners: React.FC = () => {
             <h3 className="text-2xl font-black mb-8">Configurar Banner</h3>
             <form onSubmit={handleSave} className="space-y-6">
               <input required disabled={isSubmitting} placeholder="Título da Campanha" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
-              <input required disabled={isSubmitting} placeholder="URL da Imagem (Ex: 1200x400)" value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
+              
+              <FileUpload 
+                label="Imagem do Banner" 
+                currentUrl={formData.imageUrl || ''} 
+                onUploadComplete={(url) => setFormData({...formData, imageUrl: url})} 
+              />
+
               <div className="grid grid-cols-2 gap-4">
                 <select disabled={isSubmitting} value={formData.linkType} onChange={e => setFormData({...formData, linkType: e.target.value as any})} className="bg-slate-50 rounded-2xl p-5 outline-none font-bold">
                   <option value="product">Produto</option>
