@@ -32,9 +32,12 @@ const MarketingBanners: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      // GARANTIR UUID VÁLIDO: Se não houver ID (novo registro), gera um UUID
-      // Se formData.id for "" (string vazia), o fallback será usado
-      const finalId = (formData.id && formData.id.trim() !== "") ? formData.id : crypto.randomUUID();
+      // Função auxiliar local para validar UUID
+      const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+      // GARANTIR UUID VÁLIDO: Se o ID atual não for um UUID válido (ex: for "BAN-..." ou vazio),
+      // enviamos o ID nulo ou geramos um novo para que o banco aceite.
+      const finalId = (formData.id && isUUID(formData.id)) ? formData.id : crypto.randomUUID();
       
       const newBanner = {
         ...formData,
@@ -81,10 +84,10 @@ const MarketingBanners: React.FC = () => {
         {banners.map(banner => (
           <div key={banner.id} className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden group">
             <div className="relative aspect-[21/9] overflow-hidden bg-slate-100">
-              <img src={banner.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="" />
+              <img src={banner.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="" />
               <div className="absolute top-6 right-6">
                 <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                  banner.status === 'active' ? 'bg-emerald-500 text-white shadow-xl shadow-emerald-500/20' : 'bg-slate-200 text-slate-500'
+                  banner.status === 'active' ? 'bg-emerald-50 text-white shadow-xl shadow-emerald-500/20' : 'bg-slate-200 text-slate-500'
                 }`}>
                   {banner.status === 'active' ? 'Ativo' : 'Pausado'}
                 </span>

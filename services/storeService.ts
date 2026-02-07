@@ -14,6 +14,12 @@ import { supabase } from '../backend/supabaseClient';
 const KEY_SESSION = 'auth_session';
 const MASTER_EMAIL = 'pereira.itapema@gmail.com';
 
+// Função auxiliar para validar formato UUID
+const isUUID = (str: string) => {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+};
+
 export const storeService = {
   async initializeSystem(): Promise<void> {
     if (!supabase) return;
@@ -241,6 +247,7 @@ export const storeService = {
           whatsapp: data.whatsapp, dominio: data.dominio, moeda: data.moeda, timezone: data.timezone,
           companyName: data.company_name, storeName: data.store_name, adminEmail: data.admin_email,
           systemStatus: data.system_status, environment: data.environment, privacyPolicy: data.privacy_policy,
+          // Fixed terms_of_use to termsOfUse to match interface SystemSettings
           termsOfUse: data.terms_of_use || data.termsOfUse, pwaInstalledCount: 0, pwaVersion: data.pwa_version,
           pushNotificationsActive: true, language: data.language, currency: data.currency
       } as SystemSettings;
@@ -431,7 +438,7 @@ export const storeService = {
   async saveBanner(banner: Banner): Promise<void> {
     if (!supabase) return;
     
-    // LIMPEZA DE DADOS PARA EVITAR ERRO 400
+    // LIMPEZA E FORMATAÇÃO DE DADOS PARA EVITAR ERRO 400
     // PostgREST falha ao receber "" em colunas TIMESTAMPTZ ou UUID
     const dbData: any = {
       title: banner.title || 'Sem título',
@@ -439,16 +446,18 @@ export const storeService = {
       link_type: banner.linkType || 'product',
       target_id: banner.targetId || null,
       status: banner.status || 'active',
-      start_date: (banner.startDate && banner.startDate.trim() !== '') ? banner.startDate : null,
-      end_date: (banner.endDate && banner.endDate.trim() !== '') ? banner.endDate : null
+      start_date: (banner.startDate && typeof banner.startDate === 'string' && banner.startDate.trim() !== '') ? banner.startDate : null,
+      end_date: (banner.endDate && typeof banner.endDate === 'string' && banner.endDate.trim() !== '') ? banner.endDate : null
     };
 
-    // Somente envia o ID se ele for um UUID válido (não vazio)
-    if (banner.id && banner.id.trim() !== '') {
+    // CORREÇÃO CRÍTICA: Somente envia o ID se ele for um UUID válido. 
+    // Se o banner for novo e o frontend gerou um UUID via crypto.randomUUID, ele passa aqui.
+    if (banner.id && typeof banner.id === 'string' && isUUID(banner.id)) {
       dbData.id = banner.id;
     }
 
-    const { error } = await supabase.from('banners').upsert(dbData);
+    const { error } = await supabase.from('banners').upsert(dbData, { onConflict: 'id' });
+    
     if (error) {
       console.error("[GFIT-DB-ERROR] Erro 400 ao persistir banner. Payload enviado:", dbData);
       console.error("Mensagem do servidor:", error.message);
