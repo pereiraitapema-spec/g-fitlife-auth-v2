@@ -64,7 +64,7 @@ export const storeService = {
 
   /**
    * RECUPERAÇÃO DE SENHA (FORGOT PASSWORD)
-   * CORREÇÃO: Usando window.location.origin para garantir que o redirecionamento coincida com o domínio atual e funcione em qualquer ambiente.
+   * Refinado para garantir que o redirectTo seja absoluto e sanitizado.
    */
   async recoverPassword(email: string) {
     if (!supabase) {
@@ -73,10 +73,12 @@ export const storeService = {
     }
     
     const cleanEmail = email.trim().toLowerCase();
-    const redirectUrl = `${window.location.origin}/reset-password`;
+    // Garante que não haja barras duplas no redirecionamento
+    const baseUrl = window.location.origin.replace(/\/$/, '');
+    const redirectUrl = `${baseUrl}/reset-password`;
     
-    console.log('[SUPABASE-DEBUG] Chamando resetPasswordForEmail para:', cleanEmail);
-    console.log('[SUPABASE-DEBUG] URL de redirecionamento definida como:', redirectUrl);
+    console.log('[SUPABASE-DEBUG] Solicitando reset para:', cleanEmail);
+    console.log('[SUPABASE-DEBUG] Redirecionamento configurado:', redirectUrl);
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
@@ -84,14 +86,14 @@ export const storeService = {
       });
       
       if (error) {
-        console.error('[SUPABASE-DEBUG] Supabase retornou erro no envio:', error);
+        console.error('[SUPABASE-DEBUG] Erro retornado pelo Supabase:', error);
         throw error;
       }
       
-      console.log('[SUPABASE-DEBUG] Supabase aceitou a solicitação com sucesso para:', cleanEmail);
+      console.log('[SUPABASE-DEBUG] Solicitação enviada com sucesso para a fila de e-mail do Supabase.');
       return { success: true };
     } catch (err: any) {
-      console.error('[SUPABASE-DEBUG] Catch de erro na camada de serviço:', err);
+      console.error('[SUPABASE-DEBUG] Erro no fluxo de recuperação:', err);
       return { success: false, error: err.message };
     }
   },
@@ -705,7 +707,6 @@ export const storeService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(adminData)
     });
-    // Fixed: replaced target.ok with response.ok
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Falha ao criar administrador.');
