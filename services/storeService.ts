@@ -64,7 +64,9 @@ export const storeService = {
 
   /**
    * RECUPERAÇÃO DE SENHA (FORGOT PASSWORD)
-   * Refinado para garantir que o redirectTo seja absoluto e sanitizado.
+   * CORREÇÃO: Redirecionando para a raiz (window.location.origin).
+   * O listener onAuthStateChange no App.tsx detectará o evento 'PASSWORD_RECOVERY'
+   * e redirecionará internamente para a tela de nova senha.
    */
   async recoverPassword(email: string) {
     if (!supabase) {
@@ -73,12 +75,11 @@ export const storeService = {
     }
     
     const cleanEmail = email.trim().toLowerCase();
-    // Garante que não haja barras duplas no redirecionamento
-    const baseUrl = window.location.origin.replace(/\/$/, '');
-    const redirectUrl = `${baseUrl}/reset-password`;
+    // Usar apenas o origin garante que a URL esteja na whitelist principal do Supabase
+    const redirectUrl = window.location.origin;
     
     console.log('[SUPABASE-DEBUG] Solicitando reset para:', cleanEmail);
-    console.log('[SUPABASE-DEBUG] Redirecionamento configurado:', redirectUrl);
+    console.log('[SUPABASE-DEBUG] Redirecionamento configurado para o Site URL:', redirectUrl);
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
