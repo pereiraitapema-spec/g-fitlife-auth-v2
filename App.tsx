@@ -88,14 +88,18 @@ const App: React.FC = () => {
   const [cart, setCart] = useState<Product[]>([]);
   const [feedback, setFeedback] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
   
+  // State para detalhes de produto
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
   // Login & Recovery states
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [mustChangePassword, setMustChangePassword] = useState(false);
-  const [isRecoveryMode, setIsRecoveryMode] = useState(false); // Modal Solicitação
-  const [isResetPasswordView, setIsResetPasswordView] = useState(false); // View de Redefinição Real
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false); 
+  const [isResetPasswordView, setIsResetPasswordView] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -130,7 +134,6 @@ const App: React.FC = () => {
             const newSession = storeService.createSession(profile);
             setSession(newSession);
 
-            // CRÍTICO: Verificamos se há um hash de recuperação ANTES de qualquer redirecionamento
             const hasRecoveryHash = window.location.hash.includes('type=recovery') || 
                                    window.location.hash.includes('type=invite') ||
                                    window.location.hash.includes('type=magiclink');
@@ -139,7 +142,6 @@ const App: React.FC = () => {
                if (profile.isDefaultPassword) setMustChangePassword(true);
                else handleRoleLanding(profile.role);
             } else if (hasRecoveryHash) {
-               // Forçamos a rota de redefinição se o token estiver presente
                setIsResetPasswordView(true);
                setCurrentRoute('reset-password');
             }
@@ -159,7 +161,6 @@ const App: React.FC = () => {
       try {
         await storeService.initializeSystem();
         
-        // Detecção prévia de hash de recuperação para evitar flashes de outras telas
         if (window.location.hash.includes('type=recovery') || 
             window.location.hash.includes('type=invite') ||
             window.location.hash.includes('type=magiclink')) {
@@ -178,13 +179,10 @@ const App: React.FC = () => {
 
     if (supabase) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        console.log(`[GFIT-AUTH] Evento: ${event}`);
-        
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           syncAuth();
         }
         if (event === 'PASSWORD_RECOVERY') {
-          console.log('[GFIT-AUTH] Fluxo de Recuperação Detectado via Evento.');
           setIsResetPasswordView(true);
           setCurrentRoute('reset-password');
         }
@@ -194,7 +192,6 @@ const App: React.FC = () => {
            setMustChangePassword(false);
         }
       });
-
       return () => subscription.unsubscribe();
     }
   }, []);
@@ -243,33 +240,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRecover = async (e?: React.FormEvent | React.MouseEvent) => {
-    if (e) e.preventDefault();
-    
-    const email = loginEmail.trim().toLowerCase();
-    if (!email || !email.includes('@')) {
-      triggerFeedback('Por favor, informe um e-mail válido.', 'error');
-      return;
-    }
-
-    if (isLoggingIn) return;
-    setIsLoggingIn(true);
-    
-    try {
-      const res = await storeService.recoverPassword(email);
-      if (res.success) {
-        triggerFeedback('Link de recuperação enviado. Verifique seu email.', 'success');
-        setIsRecoveryMode(false);
-      } else {
-        throw new Error(res.error);
-      }
-    } catch (err: any) {
-      triggerFeedback(err.message || 'Erro ao enviar link de recuperação', 'error');
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
   const handleLogout = () => {
     storeService.logout();
     setSession(null);
@@ -279,8 +249,17 @@ const App: React.FC = () => {
     setCurrentRoute('public-home');
   };
 
-  const handleNavigate = (route: Route) => {
+  const handleNavigate = (route: Route, params?: any) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    if (route === 'product-detail' && params?.id) {
+      setSelectedProductId(params.id);
+      storeService.getProducts().then(prods => {
+        const found = prods.find(p => p.id === params.id);
+        if (found) setSelectedProduct(found);
+      });
+    }
+
     setCurrentRoute(route);
     if (window.innerWidth <= 1024) setIsSidebarOpen(false);
   };
@@ -295,7 +274,6 @@ const App: React.FC = () => {
     </div>
   );
 
-  // View Especial de Redefinição de Senha
   if (currentRoute === 'reset-password' || isResetPasswordView) {
     return (
       <>
@@ -312,7 +290,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Admin View Login Protection
   if (viewMode === 'admin' && !session) {
     return (
       <div className="h-screen bg-slate-900 flex items-center justify-center p-6">
@@ -348,28 +325,6 @@ const App: React.FC = () => {
             )}
             <button onClick={() => setViewMode('store')} className="text-[10px] font-black text-slate-400 uppercase underline mt-4 hover:text-slate-900">Vitrine Pública</button>
         </div>
-
-        {/* Modal de Recuperação de Senha */}
-        {isRecoveryMode && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-6 animate-in fade-in duration-300">
-             <div className="bg-white rounded-[50px] p-12 max-w-sm w-full shadow-2xl space-y-6 text-center animate-in zoom-in-95">
-                <div className="text-4xl">📧</div>
-                <h3 className="text-2xl font-black text-slate-900 uppercase">Recuperar Acesso</h3>
-                <p className="text-slate-500 text-xs font-medium leading-relaxed">Enviaremos um link de acesso direto para o seu e-mail cadastrado.</p>
-                <form onSubmit={handleRecover} className="space-y-4">
-                   <input required type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="Seu e-mail de acesso" className="w-full bg-slate-50 border-none rounded-2xl p-6 outline-none font-bold shadow-inner" />
-                   <button 
-                     type="submit"
-                     disabled={isLoggingIn} 
-                     className="w-full py-5 bg-emerald-500 text-white rounded-[24px] font-black text-xs uppercase shadow-xl hover:bg-emerald-600 transition-all active:scale-95"
-                   >
-                     {isLoggingIn ? 'ENVIANDO...' : 'Enviar link de recuperação'}
-                   </button>
-                   <button type="button" onClick={() => setIsRecoveryMode(false)} className="w-full py-3 text-[10px] font-black text-slate-400 uppercase hover:text-slate-900">Voltar</button>
-                </form>
-             </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -384,14 +339,53 @@ const App: React.FC = () => {
            <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-12">
               {currentRoute === 'public-home' && <PublicHome onNavigate={handleNavigate} onAddToCart={p => setCart([...cart, p])} />}
               {currentRoute === 'departments' && <PublicDepartments onNavigate={handleNavigate} />}
-              {currentRoute === 'store-catalog' && <PublicCatalog onBuy={p => setCart([...cart, p])} />}
-              {currentRoute === 'store-offers' && <PublicCatalog onBuy={p => setCart([...cart, p])} showOnlyOffers />}
+              {currentRoute === 'store-catalog' && <PublicCatalog onNavigate={handleNavigate} onBuy={p => setCart([...cart, p])} />}
+              {currentRoute === 'store-offers' && <PublicCatalog onNavigate={handleNavigate} onBuy={p => setCart([...cart, p])} showOnlyOffers />}
               {currentRoute === 'checkout' && <CheckoutPage product={cart.length > 0 ? cart[0] : null} onComplete={() => { setCart([]); handleNavigate('customer-portal'); }} />}
               {currentRoute === 'public-contact' && <PublicContact />}
               {currentRoute === 'affiliate-register' && <PublicAffiliateRegister onComplete={() => handleNavigate('public-home')} />}
               {currentRoute === 'favorites' && <PublicFavorites user={session} onAddToCart={p => setCart([...cart, p])} onNavigate={handleNavigate} />}
               {currentRoute === 'affiliate-portal' && <AffiliatePortal user={session} onNavigate={handleNavigate} />}
               {currentRoute === 'customer-portal' && <CustomerPortal user={session} onNavigate={handleNavigate} />}
+              
+              {currentRoute === 'product-detail' && selectedProduct && (
+                <div className="animate-in fade-in duration-700 space-y-12">
+                   <button onClick={() => handleNavigate('store-catalog')} className="text-xs font-black text-slate-400 uppercase tracking-widest hover:text-emerald-500 flex items-center gap-2">← Voltar ao Catálogo</button>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+                      <div className="rounded-[60px] overflow-hidden shadow-2xl border border-slate-100 aspect-square">
+                         <img src={selectedProduct.image} className="w-full h-full object-cover" alt={selectedProduct.name} />
+                      </div>
+                      <div className="space-y-8 flex flex-col justify-center">
+                         <div className="space-y-4">
+                           <p className="text-xs font-black text-emerald-500 uppercase tracking-[0.3em]">{selectedProduct.brand}</p>
+                           <h2 className="text-5xl font-black text-slate-900 leading-tight tracking-tight">{selectedProduct.name}</h2>
+                           <div className="flex items-center gap-3">
+                              <div className="flex text-amber-400 text-lg">★★★★★</div>
+                              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">({selectedProduct.reviews} avaliações confirmadas)</span>
+                           </div>
+                         </div>
+                         <div className="space-y-2">
+                           <div className="flex items-baseline gap-4">
+                             <span className="text-5xl font-black text-slate-900">R$ {selectedProduct.price.toFixed(2)}</span>
+                             {selectedProduct.originalPrice && (
+                               <span className="text-2xl text-slate-400 line-through">R$ {selectedProduct.originalProductPrice.toFixed(2)}</span>
+                             )}
+                           </div>
+                           <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg w-fit">Disponível em estoque - Envio Imediato</p>
+                         </div>
+                         <p className="text-slate-600 text-lg leading-relaxed font-medium">
+                           {selectedProduct.description || "Este produto premium foi desenvolvido com tecnologia de ponta para garantir os melhores resultados na sua jornada fitness."}
+                         </p>
+                         <button 
+                           onClick={() => { setCart([...cart, selectedProduct]); handleNavigate('checkout'); }}
+                           className="w-full py-7 bg-slate-900 text-white rounded-[32px] font-black text-xl shadow-2xl hover:bg-emerald-500 transition-all duration-300 flex items-center justify-center gap-4 active:scale-95"
+                         >
+                           COMPRAR AGORA
+                         </button>
+                      </div>
+                   </div>
+                </div>
+              )}
            </main>
            <PublicFooter onNavigate={handleNavigate} />
            <AICoach isOpen={isCoachOpen} onClose={() => setIsCoachOpen(false)} />

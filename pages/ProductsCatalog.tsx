@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Product } from '../types';
 import { storeService } from '../services/storeService';
@@ -35,9 +34,10 @@ const ProductsCatalog: React.FC = () => {
     
     setIsSubmitting(true);
     try {
+      // CORREÇÃO: Usar apenas Date.now() para garantir ID bigint no banco
       const newProd: Product = {
         ...formData,
-        id: editId || 'p-' + Date.now(),
+        id: editId || Date.now().toString(),
         brand: formData.brand || 'G-Labs',
         image: formData.image || 'https://picsum.photos/seed/placeholder/400/400',
         rating: formData.rating || 5,

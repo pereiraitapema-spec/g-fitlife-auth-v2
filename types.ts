@@ -441,7 +441,7 @@ export type Route =
   | 'help-overview' | 'help-core-detail' | 'affiliate-register'
   | 'products-catalog' | 'orders' | 'store-catalog' | 'checkout' | 'store-offers' | 'public-contact'
   | 'public-home' | 'departments' | 'categories' | 'coupons' | 'favorites'
-  | 'affiliate-portal' | 'customer-portal' | 'reset-password'
+  | 'affiliate-portal' | 'customer-portal' | 'reset-password' | 'product-detail'
   | 'mkt-banners' | 'mkt-remkt' | 'mkt-chat'
   | 'seo-onpage' | 'seo-tech' | 'seo-perf' | 'seo-audit'
   | 'fin-gateways' | 'fin-trans' | 'fin-reports'

@@ -1,15 +1,17 @@
+
 import React, { useState, useEffect } from 'react';
-import { Product, UserSession } from '../types';
+import { Product, UserSession, Route } from '../types';
 import { storeService } from '../services/storeService';
 import { MOCK_PRODUCTS } from '../constants';
 import ProductCard from '../components/ProductCard';
 
 interface PublicCatalogProps {
   onBuy: (product: Product) => void;
+  onNavigate?: (route: Route, params?: any) => void;
   showOnlyOffers?: boolean;
 }
 
-const PublicCatalog: React.FC<PublicCatalogProps> = ({ onBuy, showOnlyOffers }) => {
+const PublicCatalog: React.FC<PublicCatalogProps> = ({ onBuy, onNavigate, showOnlyOffers }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
@@ -116,7 +118,9 @@ const PublicCatalog: React.FC<PublicCatalogProps> = ({ onBuy, showOnlyOffers }) 
 
               <div className="space-y-4">
                 <p className="text-xs font-black text-emerald-500 uppercase tracking-[0.3em]">{quickViewProduct.brand}</p>
-                <h3 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight">{quickViewProduct.name}</h3>
+                <h3 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight group cursor-pointer hover:text-emerald-500 transition-colors" onClick={() => onNavigate && onNavigate('product-detail', { id: quickViewProduct.id })}>
+                  {quickViewProduct.name}
+                </h3>
                 <div className="flex items-center gap-3">
                    <div className="flex text-amber-400 text-lg">★★★★★</div>
                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">({quickViewProduct.reviews} avaliações)</span>
@@ -148,8 +152,14 @@ const PublicCatalog: React.FC<PublicCatalogProps> = ({ onBuy, showOnlyOffers }) 
                   ADICIONAR AO CARRINHO
                 </button>
                 <button 
+                  onClick={() => { if(onNavigate) { onNavigate('product-detail', { id: quickViewProduct.id }); setQuickViewProduct(null); } }}
+                  className="w-full py-4 text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-700 transition-colors bg-emerald-50 rounded-2xl"
+                >
+                  Ver Detalhes Completos
+                </button>
+                <button 
                   onClick={() => setQuickViewProduct(null)}
-                  className="w-full py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
+                  className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
                 >
                   Continuar Comprando
                 </button>

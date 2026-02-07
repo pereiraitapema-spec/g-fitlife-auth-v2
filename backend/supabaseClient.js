@@ -2,19 +2,13 @@ import { createClient } from '@supabase/supabase-js';
 
 /**
  * SUPABASE CLIENT - G-FITLIFE
- * Acesso robusto para garantir substituição pelo Vite Define/Environment.
+ * Acesso direto para garantir a substituição estática pelo Vite/Define.
  */
 
-// Busca as credenciais tentando todas as formas de injeção possíveis no Vite/Node
-const SUPABASE_URL = 
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) || 
-  (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) || 
-  '';
-
-const SUPABASE_ANON_KEY = 
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) || 
-  (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) || 
-  '';
+// As variáveis abaixo são substituídas em tempo de build pelo Vite.
+// Não use encadeamento opcional (?.) aqui, pois isso quebra a substituição literal do bundler.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY) 
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
@@ -30,6 +24,6 @@ if (typeof window !== 'undefined') {
     }
   } else {
     console.error("[GFIT-ERROR] Credenciais do Supabase ausentes no bundle do cliente.");
-    console.warn("[GFIT-TIP] Verifique se VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY estão no Railway.");
+    console.warn("[GFIT-TIP] Verifique se VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY estão configurados corretamente nas variáveis de ambiente do Railway.");
   }
 }
