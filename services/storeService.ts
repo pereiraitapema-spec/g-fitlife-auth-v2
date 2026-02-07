@@ -23,7 +23,7 @@ export const storeService = {
 
   // AUTH & SESSION
   async login(email: string, pass: string) {
-    if (!supabase) return { success: false, error: 'Serviço Offline.' };
+    if (!supabase) return { success: false, error: 'Serviço de autenticação temporariamente offline.' };
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -58,28 +58,24 @@ export const storeService = {
         }
       }
     } catch (err) {
-      return { success: false, error: 'Erro de comunicação.' };
+      return { success: false, error: 'Erro de comunicação com o servidor.' };
     }
     return { success: false, error: 'Perfil não encontrado.' };
   },
 
   /**
    * RECUPERAÇÃO DE SENHA (FORGOT PASSWORD)
-   * CORREÇÃO DEFINITIVA: Força a remoção de barra final para evitar bloqueio por URL mismatch.
    */
   async recoverPassword(email: string) {
     if (!supabase) {
       console.error('[SUPABASE-DEBUG] Supabase não inicializado.');
-      return { success: false, error: 'Offline' };
+      return { success: false, error: 'O serviço de autenticação não está respondendo. Tente novamente em instantes.' };
     }
     
     const cleanEmail = email.trim().toLowerCase();
-    
-    // window.location.origin geralmente não tem barra, mas o replace(/\/$/, "") garante 100% de segurança
     const redirectUrl = window.location.origin.replace(/\/$/, "");
     
     console.log('[SUPABASE-DEBUG] Solicitando reset para:', cleanEmail);
-    console.log('[SUPABASE-DEBUG] URL de retorno higienizada:', redirectUrl);
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
@@ -94,7 +90,7 @@ export const storeService = {
       return { success: true };
     } catch (err: any) {
       console.error('[SUPABASE-DEBUG] Falha de Execução:', err);
-      return { success: false, error: err.message || 'Erro ao processar e-mail.' };
+      return { success: false, error: err.message || 'Erro ao processar e-mail de recuperação.' };
     }
   },
 
