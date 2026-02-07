@@ -1,5 +1,6 @@
 import React from 'react';
-import { Route } from '../App';
+// Fixed: Route type is imported from ../types
+import { Route } from '../types';
 
 interface PublicFooterProps {
   onNavigate?: (route: Route) => void;

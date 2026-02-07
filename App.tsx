@@ -74,27 +74,8 @@ import InfraBackup from './pages/InfraBackup';
 import InfraMonitoring from './pages/InfraMonitoring';
 
 import { storeService } from './services/storeService';
-import { UserSession, Product, UserRole, UserStatus } from './types';
+import { UserSession, Product, UserRole, UserStatus, Route } from './types';
 import { supabase } from './backend/supabaseClient';
-
-export type Route = 
-  | 'dashboard' | 'core-settings' | 'core-users' | 'core-roles' 
-  | 'help-overview' | 'help-core-detail' | 'affiliate-register'
-  | 'products-catalog' | 'orders' | 'store-catalog' | 'checkout' | 'store-offers' | 'public-contact'
-  | 'public-home' | 'departments' | 'categories' | 'coupons' | 'favorites'
-  | 'affiliate-portal' | 'customer-portal' | 'reset-password'
-  | 'mkt-banners' | 'mkt-remkt' | 'mkt-chat'
-  | 'seo-onpage' | 'seo-tech' | 'seo-perf' | 'seo-audit'
-  | 'fin-gateways' | 'fin-trans' | 'fin-reports'
-  | 'log-carriers' | 'log-rates' | 'log-deliveries'
-  | 'mkp-sellers' | 'mkp-prods' | 'mkp-orders' | 'mkp-fin'
-  | 'aff-overview' | 'aff-commissions' | 'aff-links' | 'aff-reports'
-  | 'lgpd-consents' | 'lgpd-mydata' | 'lgpd-logs' | 'lgpd-policy'
-  | 'pwa-settings' | 'pwa-installs' | 'pwa-push'
-  | 'int-apis' | 'int-crm' | 'int-wa' | 'int-erp'
-  | 'ai-recom' | 'ai-predict' | 'ai-automations' | 'ai-logs'
-  | 'sec-auth' | 'sec-perms' | 'sec-audit' | 'sec-logs'
-  | 'infra-env' | 'infra-deploy' | 'infra-backup' | 'infra-monitoring';
 
 const App: React.FC = () => {
   const [isSystemReady, setIsSystemReady] = useState(false);
@@ -225,10 +206,6 @@ const App: React.FC = () => {
     }
   };
 
-  /**
-   * FLUXO PROFISSIONAL DE RECUPERAÇÃO DE ACESSO
-   * CORREÇÃO: Usa o método recoverPassword (resetPasswordForEmail) do storeService
-   */
   const handleRecover = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e) e.preventDefault();
     
@@ -242,7 +219,6 @@ const App: React.FC = () => {
     setIsLoggingIn(true);
     
     try {
-      // Correção: Uso do método de recuperação real para evitar erros de banco ao tentar criar usuário via OTP
       const res = await storeService.recoverPassword(email);
       
       if (res.success) {

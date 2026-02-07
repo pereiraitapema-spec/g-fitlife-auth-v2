@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserRole, SystemSettings } from '../types';
+import { UserRole, SystemSettings, Route } from '../types';
 import { storeService } from '../services/storeService';
-import { Route } from '../App';
 
 interface SidebarProps {
   isOpen: boolean;

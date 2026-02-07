@@ -1,7 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Route } from '../App';
-import { UserSession, UserRole, SystemSettings } from '../types';
+import { UserSession, UserRole, SystemSettings, Route } from '../types';
 import { storeService } from '../services/storeService';
 
 interface PublicHeaderProps {

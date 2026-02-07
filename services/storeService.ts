@@ -64,13 +64,13 @@ export const storeService = {
 
   /**
    * RECUPERAÇÃO DE SENHA (FORGOT PASSWORD)
-   * CORREÇÃO: Redirecionamento para a URL de produção /reset-password
+   * CORREÇÃO: Usando window.location.origin para garantir que o redirecionamento coincida com o domínio atual e funcione em qualquer ambiente.
    */
   async recoverPassword(email: string) {
     if (!supabase) return { success: false, error: 'Offline' };
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo: 'https://g-fitlife-auth-v2-production.up.railway.app/reset-password',
+        redirectTo: `${window.location.origin}/reset-password`,
       });
       if (error) throw error;
       return { success: true };
@@ -688,6 +688,7 @@ export const storeService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(adminData)
     });
+    // Fixed: replaced target.ok with response.ok
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Falha ao criar administrador.');
