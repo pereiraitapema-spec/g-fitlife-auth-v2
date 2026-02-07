@@ -63,34 +63,16 @@ export const storeService = {
     return { success: false, error: 'Perfil não encontrado.' };
   },
 
-  /**
-   * RECUPERAÇÃO DE SENHA (FORGOT PASSWORD)
-   */
   async recoverPassword(email: string) {
-    if (!supabase) {
-      console.error('[SUPABASE-DEBUG] Supabase não inicializado.');
-      return { success: false, error: 'O serviço de autenticação não está respondendo. Tente novamente em instantes.' };
-    }
-    
-    const cleanEmail = email.trim().toLowerCase();
-    const redirectUrl = window.location.origin.replace(/\/$/, "");
-    
-    console.log('[SUPABASE-DEBUG] Solicitando reset para:', cleanEmail);
-
+    if (!supabase) return { success: false, error: 'Supabase Offline' };
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-        redirectTo: redirectUrl,
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo: window.location.origin.replace(/\/$/, ""),
       });
-      
-      if (error) {
-        console.error('[SUPABASE-DEBUG] Erro API Supabase:', error.message);
-        return { success: false, error: error.message };
-      }
-      
+      if (error) return { success: false, error: error.message };
       return { success: true };
-    } catch (err: any) {
-      console.error('[SUPABASE-DEBUG] Falha de Execução:', err);
-      return { success: false, error: err.message || 'Erro ao processar e-mail de recuperação.' };
+    } catch (err) {
+      return { success: false, error: 'Falha ao enviar e-mail de recuperação.' };
     }
   },
 
@@ -160,9 +142,15 @@ export const storeService = {
         provider: 'google',
         options: { redirectTo: window.location.origin.replace(/\/$/, "") }
       });
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes('provider is not enabled')) {
+          alert("O Login com Google não está ativado no painel do Supabase. Entre em contato com o suporte.");
+        }
+        throw error;
+      }
       return { success: true };
     } catch (err) {
+      console.error("[GFIT-GOOGLE-ERR]", err);
       return { success: false, error: 'Falha Google Auth.' };
     }
   },
@@ -171,51 +159,53 @@ export const storeService = {
     if (!supabase) return null;
     
     try {
-      let { data: profile, error: fetchError } = await supabase.from('user_profile').select('*').eq('id', userId).maybeSingle();
+      // Tentativa segura de buscar perfil
+      const { data: profile, error: fetchError } = await supabase
+        .from('user_profile')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
       
-      // Se houver erro de servidor (500), evita crash
       if (fetchError) {
-        console.error("[GFIT-DB-ERROR] Erro ao buscar perfil:", fetchError);
+        console.error("[GFIT-DB-ERROR] Erro 500/Recursão ao buscar perfil:", fetchError.message);
+        // Fallback: Tenta usar os metadados do próprio usuário se o banco falhar
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+           return {
+             id: authUser.id,
+             email: authUser.email || '',
+             name: authUser.user_metadata?.full_name || 'Usuário G-Fit',
+             role: UserRole.CUSTOMER,
+             status: UserStatus.ACTIVE,
+             createdAt: authUser.created_at,
+             loginType: 'hybrid'
+           };
+        }
         return null;
       }
 
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return profile ? this.normalizeProfile(profile) : null;
-
-      const email = authUser.email?.toLowerCase();
-      const isMasterEmail = email === MASTER_EMAIL;
-
       if (profile) {
-        if (isMasterEmail && profile.role !== UserRole.ADMIN_MASTER) {
-          const { data: updated } = await supabase.from('user_profile')
-            .update({ role: UserRole.ADMIN_MASTER })
-            .eq('id', userId)
-            .select()
-            .maybeSingle();
-          return this.normalizeProfile(updated);
-        }
         return this.normalizeProfile(profile);
       }
 
+      // Se não existe perfil, cria um novo
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return null;
+
       const newProfileData = {
         id: authUser.id,
-        email: email,
-        name: authUser.user_metadata?.full_name || (isMasterEmail ? 'Master Admin' : 'Membro G-Fit'),
-        role: isMasterEmail ? UserRole.ADMIN_MASTER : UserRole.CUSTOMER,
+        email: authUser.email,
+        name: authUser.user_metadata?.full_name || 'Membro G-Fit',
+        role: (authUser.email === MASTER_EMAIL) ? UserRole.ADMIN_MASTER : UserRole.CUSTOMER,
         status: UserStatus.ACTIVE,
         login_type: 'hybrid',
-        is_default_password: !authUser.app_metadata.provider || authUser.app_metadata.provider === 'email', 
         created_at: new Date().toISOString()
       };
       
-      const { data: created, error: insertError } = await supabase.from('user_profile').insert(newProfileData).select().maybeSingle();
-      if (insertError) {
-        console.error("[GFIT-DB-ERROR] Erve ao criar perfil:", insertError);
-        return null;
-      }
-      return this.normalizeProfile(created);
+      const { data: created } = await supabase.from('user_profile').insert(newProfileData).select().maybeSingle();
+      return created ? this.normalizeProfile(created) : this.normalizeProfile(newProfileData);
     } catch (e) {
-      console.error("[GFIT-CRITICAL] Falha no fluxo de sincronia de perfil:", e);
+      console.error("[GFIT-CRITICAL] Falha na sincronia de perfil:", e);
       return null;
     }
   },
@@ -294,8 +284,10 @@ export const storeService = {
 
   async getSettings(): Promise<SystemSettings> {
     if (supabase) {
-      const { data } = await supabase.from('core_settings').select('*').eq('key', 'geral').maybeSingle();
-      if (data) {
+      const { data, error } = await supabase.from('core_settings').select('*').eq('key', 'geral').maybeSingle();
+      if (error) {
+         console.error("[GFIT-DB-ERROR] Erro ao buscar settings:", error.message);
+      } else if (data) {
         return {
           nomeLoja: data.nome_loja,
           logoUrl: data.logo_url,
