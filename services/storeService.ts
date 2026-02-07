@@ -67,14 +67,31 @@ export const storeService = {
    * CORREÇÃO: Usando window.location.origin para garantir que o redirecionamento coincida com o domínio atual e funcione em qualquer ambiente.
    */
   async recoverPassword(email: string) {
-    if (!supabase) return { success: false, error: 'Offline' };
+    if (!supabase) {
+      console.error('[SUPABASE-DEBUG] Tentativa de recuperação falhou: Supabase não inicializado.');
+      return { success: false, error: 'Offline' };
+    }
+    
+    const cleanEmail = email.trim().toLowerCase();
+    const redirectUrl = `${window.location.origin}/reset-password`;
+    
+    console.log('[SUPABASE-DEBUG] Chamando resetPasswordForEmail para:', cleanEmail);
+    console.log('[SUPABASE-DEBUG] URL de redirecionamento definida como:', redirectUrl);
+
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: redirectUrl,
       });
-      if (error) throw error;
+      
+      if (error) {
+        console.error('[SUPABASE-DEBUG] Supabase retornou erro no envio:', error);
+        throw error;
+      }
+      
+      console.log('[SUPABASE-DEBUG] Supabase aceitou a solicitação com sucesso para:', cleanEmail);
       return { success: true };
     } catch (err: any) {
+      console.error('[SUPABASE-DEBUG] Catch de erro na camada de serviço:', err);
       return { success: false, error: err.message };
     }
   },

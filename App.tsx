@@ -210,7 +210,10 @@ const App: React.FC = () => {
     if (e) e.preventDefault();
     
     const email = loginEmail.trim().toLowerCase();
+    console.log('[GFIT-AUTH] Iniciando tentativa de recuperação para:', email);
+
     if (!email || !email.includes('@')) {
+      console.warn('[GFIT-AUTH] E-mail inválido ignorado.');
       triggerFeedback('Por favor, informe um e-mail válido.', 'error');
       return;
     }
@@ -219,12 +222,15 @@ const App: React.FC = () => {
     setIsLoggingIn(true);
     
     try {
+      console.log('[GFIT-AUTH] Chamando storeService.recoverPassword...');
       const res = await storeService.recoverPassword(email);
       
       if (res.success) {
+        console.log('[GFIT-AUTH] Sucesso: Link enviado via Supabase para:', email);
         triggerFeedback('Link de recuperação enviado. Verifique seu email.', 'success');
         setIsRecoveryMode(false);
       } else {
+        console.error('[GFIT-AUTH] Falha no envio:', res.error);
         throw new Error(res.error);
       }
     } catch (err: any) {
