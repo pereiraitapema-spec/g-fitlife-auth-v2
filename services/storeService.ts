@@ -16,8 +16,20 @@ const MASTER_EMAIL = 'pereira.itapema@gmail.com';
 
 // Função auxiliar para validar formato UUID
 const isUUID = (str: string) => {
-  if (!str) return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  if (!str || typeof str !== 'string') return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str.trim());
+};
+
+// Helper para converter data do input (YYYY-MM-DD) para ISO ou null
+const formatToISO = (dateStr?: string) => {
+  if (!dateStr || dateStr.trim() === '') return null;
+  try {
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  } catch {
+    return null;
+  }
 };
 
 export const storeService = {
@@ -247,7 +259,6 @@ export const storeService = {
           whatsapp: data.whatsapp, dominio: data.dominio, moeda: data.moeda, timezone: data.timezone,
           companyName: data.company_name, storeName: data.store_name, adminEmail: data.admin_email,
           systemStatus: data.system_status, environment: data.environment, privacyPolicy: data.privacy_policy,
-          // Fixed terms_of_use to termsOfUse to match interface SystemSettings
           termsOfUse: data.terms_of_use || data.termsOfUse, pwaInstalledCount: 0, pwaVersion: data.pwa_version,
           pushNotificationsActive: true, language: data.language, currency: data.currency
       } as SystemSettings;
@@ -438,30 +449,30 @@ export const storeService = {
   async saveBanner(banner: Banner): Promise<void> {
     if (!supabase) return;
     
-    // LIMPEZA E FORMATAÇÃO DE DADOS PARA EVITAR ERRO 400
-    // PostgREST falha ao receber "" em colunas TIMESTAMPTZ ou UUID
+    // HIGIENIZAÇÃO RIGOROSA PARA EVITAR ERRO 400
+    // O PostgREST rejeita strings vazias em colunas do tipo UUID ou TIMESTAMPTZ.
     const dbData: any = {
-      title: banner.title || 'Sem título',
-      image_url: banner.imageUrl || null,
-      link_type: banner.linkType || 'product',
-      target_id: banner.targetId || null,
-      status: banner.status || 'active',
-      start_date: (banner.startDate && typeof banner.startDate === 'string' && banner.startDate.trim() !== '') ? banner.startDate : null,
-      end_date: (banner.endDate && typeof banner.endDate === 'string' && banner.endDate.trim() !== '') ? banner.endDate : null
+      title: (banner.title || 'Sem título').trim(),
+      image_url: (banner.imageUrl && banner.imageUrl.trim() !== '') ? banner.imageUrl.trim() : null,
+      link_type: (banner.linkType || 'product'),
+      target_id: (banner.targetId && banner.targetId.trim() !== '') ? banner.targetId.trim() : null,
+      status: (banner.status || 'active'),
+      start_date: formatToISO(banner.startDate),
+      end_date: formatToISO(banner.endDate)
     };
 
-    // CORREÇÃO CRÍTICA: Somente envia o ID se ele for um UUID válido. 
-    // Se o banner for novo e o frontend gerou um UUID via crypto.randomUUID, ele passa aqui.
-    if (banner.id && typeof banner.id === 'string' && isUUID(banner.id)) {
+    // Só incluir o campo 'id' se ele for um UUID válido. Caso contrário, deixar o Supabase gerar.
+    if (banner.id && isUUID(banner.id)) {
       dbData.id = banner.id;
     }
 
-    const { error } = await supabase.from('banners').upsert(dbData, { onConflict: 'id' });
+    console.log("[GFIT-DB] Sincronizando Banner com Supabase:", dbData);
+
+    const { error } = await supabase.from('banners').upsert(dbData);
     
     if (error) {
-      console.error("[GFIT-DB-ERROR] Erro 400 ao persistir banner. Payload enviado:", dbData);
-      console.error("Mensagem do servidor:", error.message);
-      throw error;
+      console.error("[GFIT-DB-ERROR] Falha ao persistir banner (Código 400):", error.message, error.details);
+      throw new Error(`Erro na persistência do banner: ${error.message}`);
     }
     window.dispatchEvent(new Event('bannersChanged'));
   },
@@ -472,7 +483,7 @@ export const storeService = {
       id: c.id,
       code: c.code,
       type: c.type,
-      value: c.discount, // Mapeado de discount para value no front
+      value: c.discount, 
       status: c.active ? 'active' : 'inactive',
       expiresAt: c.expires_at
     }));
@@ -480,20 +491,19 @@ export const storeService = {
   async saveCoupon(c: Coupon): Promise<void> { 
     if (!supabase) return;
     
-    // Mapeamento corrigido conforme colunas informadas pelo usuário e data de expiração real
     const dbData: any = {
       id: c.id,
       code: c.code,
       type: c.type,
-      discount: c.value || 0, // Mapeado de value para discount
-      active: c.status === 'active', // Mapeado de status para active (bool)
+      discount: c.value || 0, 
+      active: c.status === 'active', 
       expires_at: c.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     };
 
     const { error } = await supabase.from('coupons').upsert(dbData);
     
     if (error) {
-      console.error("[GFIT-DB-ERROR] Falha ao persistir cupom no Supabase:", error);
+      console.error("[GFIT-DB-ERROR] Falha ao persistir cupom:", error);
       throw error;
     }
     window.dispatchEvent(new Event('couponsChanged'));

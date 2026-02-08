@@ -24,19 +24,23 @@ const MarketingBanners: React.FC = () => {
     e.preventDefault();
     if (isSubmitting) return;
     
-    // Validação mínima
-    if (!formData.imageUrl) {
-        alert("Por favor, selecione uma imagem para o banner.");
+    // Validação mínima de interface
+    if (!formData.title?.trim()) {
+        alert("Por favor, informe um título interno para este banner.");
+        return;
+    }
+    if (!formData.imageUrl?.trim()) {
+        alert("A imagem do banner é obrigatória. Faça o upload antes de salvar.");
         return;
     }
 
     setIsSubmitting(true);
     try {
-      // Função auxiliar local para validar UUID
+      // Função auxiliar local para validar UUID antes de persistir
       const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-      // GARANTIR UUID VÁLIDO: Se o ID atual não for um UUID válido (ex: for "BAN-..." ou vazio),
-      // enviamos o ID nulo ou geramos um novo para que o banco aceite.
+      // GARANTIR UUID VÁLIDO: Se for um novo banner ou o ID atual for inválido (ex: BAN-...),
+      // geramos um novo UUID via crypto para cumprir restrições do banco.
       const finalId = (formData.id && isUUID(formData.id)) ? formData.id : crypto.randomUUID();
       
       const newBanner = {
@@ -44,7 +48,7 @@ const MarketingBanners: React.FC = () => {
         id: finalId
       } as Banner;
       
-      console.log("[GFIT-DEBUG] Tentando persistir banner:", newBanner);
+      console.log("[GFIT-BANNER-UI] Iniciando salvamento:", newBanner);
       
       await storeService.saveBanner(newBanner);
       await loadData();
@@ -52,10 +56,10 @@ const MarketingBanners: React.FC = () => {
       
       // Limpeza completa do estado
       setFormData({ title: '', imageUrl: '', linkType: 'product', targetId: '', status: 'active', startDate: '', endDate: '' });
-      alert("Banner salvo com sucesso!");
+      alert("Configurações do banner persistidas no Supabase!");
     } catch (error: any) {
-      console.error("[GFIT-UI-ERROR] Erro ao salvar banner:", error);
-      alert("Falha ao salvar banner no banco de dados. Verifique os dados e tente novamente.");
+      console.error("[GFIT-BANNER-ERROR] Falha na operação visual:", error);
+      alert(`Erro ao salvar banner: ${error.message || "Tente novamente mais tarde."}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -114,6 +118,11 @@ const MarketingBanners: React.FC = () => {
             </div>
           </div>
         ))}
+        {banners.length === 0 && !isSubmitting && (
+          <div className="col-span-full py-20 text-center bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200">
+            <p className="text-slate-400 font-bold uppercase tracking-widest">Nenhum banner cadastrado no momento.</p>
+          </div>
+        )}
       </div>
 
       {isModalOpen && (
@@ -123,7 +132,7 @@ const MarketingBanners: React.FC = () => {
             <form onSubmit={handleSave} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Título Interno</label>
-                <input required disabled={isSubmitting} placeholder="Campanha Verão 2026" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold shadow-inner" />
+                <input required disabled={isSubmitting} placeholder="Ex: Campanha Whey Isolate 2024" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold shadow-inner" />
               </div>
               
               <FileUpload 
@@ -136,14 +145,14 @@ const MarketingBanners: React.FC = () => {
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tipo de Link</label>
                   <select disabled={isSubmitting} value={formData.linkType} onChange={e => setFormData({...formData, linkType: e.target.value as any})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold">
-                    <option value="product">Produto</option>
-                    <option value="category">Categoria</option>
-                    <option value="external">Link Externo</option>
+                    <option value="product">Produto Específico</option>
+                    <option value="category">Categoria Inteira</option>
+                    <option value="external">URL Externa</option>
                   </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">ID Alvo / URL</label>
-                  <input disabled={isSubmitting} placeholder="Ex: p1 ou whey-pro" value={formData.targetId} onChange={e => setFormData({...formData, targetId: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold shadow-inner" />
+                  <input disabled={isSubmitting} placeholder="ID do item ou link" value={formData.targetId} onChange={e => setFormData({...formData, targetId: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold shadow-inner" />
                 </div>
               </div>
 
@@ -159,7 +168,7 @@ const MarketingBanners: React.FC = () => {
               </div>
 
               <div className="flex gap-4 pt-4">
-                <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs hover:bg-emerald-500 transition-all disabled:opacity-50">
+                <button type="submit" disabled={isSubmitting} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs hover:bg-emerald-500 transition-all disabled:opacity-50 shadow-xl">
                   {isSubmitting ? 'SINCRONIZANDO...' : 'SALVAR NO SUPABASE'}
                 </button>
                 <button type="button" disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-bold uppercase text-xs">CANCELAR</button>
