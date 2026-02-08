@@ -8,7 +8,7 @@ const MarketingBanners: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Partial<Banner>>({
-    title: '', imageUrl: '', linkType: 'product', targetId: '', status: 'active', startDate: '', endDate: ''
+    title: '', imageUrl: '', targetId: ''
   });
 
   const loadData = async () => {
@@ -39,24 +39,25 @@ const MarketingBanners: React.FC = () => {
       // Função auxiliar local para validar UUID antes de persistir
       const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-      // GARANTIR UUID VÁLIDO: Se for um novo banner ou o ID atual for inválido (ex: BAN-...),
-      // geramos um novo UUID via crypto para cumprir restrições do banco.
+      // GARANTIR UUID VÁLIDO
       const finalId = (formData.id && isUUID(formData.id)) ? formData.id : crypto.randomUUID();
       
       const newBanner = {
-        ...formData,
+        title: formData.title,
+        imageUrl: formData.imageUrl,
+        targetId: formData.targetId || '',
         id: finalId
       } as Banner;
       
-      console.log("[GFIT-BANNER-UI] Iniciando salvamento (Ajuste de Schema Supabase):", newBanner);
+      console.log("[GFIT-BANNER-UI] Iniciando salvamento (Strict Schema Match):", newBanner);
       
       await storeService.saveBanner(newBanner);
       await loadData();
       setIsModalOpen(false);
       
       // Limpeza completa do estado
-      setFormData({ title: '', imageUrl: '', linkType: 'product', targetId: '', status: 'active', startDate: '', endDate: '' });
-      alert("Configurações do banner persistidas no Supabase!");
+      setFormData({ title: '', imageUrl: '', targetId: '' });
+      alert("Banner persistido no Supabase com sucesso!");
     } catch (error: any) {
       console.error("[GFIT-BANNER-ERROR] Falha na operação visual:", error);
       alert(`Erro ao salvar banner: ${error.message || "Tente novamente mais tarde."}`);
@@ -70,12 +71,12 @@ const MarketingBanners: React.FC = () => {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">Campanhas Visuais</h2>
-          <p className="text-slate-500 font-medium">Controle os destaques da vitrine e agende promoções.</p>
+          <p className="text-slate-500 font-medium">Controle os destaques da vitrine do hub G-FitLife.</p>
         </div>
         <button 
           disabled={isSubmitting}
           onClick={() => {
-            setFormData({ title: '', imageUrl: '', linkType: 'product', targetId: '', status: 'active', startDate: '', endDate: '' });
+            setFormData({ title: '', imageUrl: '', targetId: '' });
             setIsModalOpen(true);
           }}
           className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black shadow-2xl hover:bg-emerald-500 transition-all disabled:opacity-50"
@@ -89,22 +90,15 @@ const MarketingBanners: React.FC = () => {
           <div key={banner.id} className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden group">
             <div className="relative aspect-[21/9] overflow-hidden bg-slate-100">
               <img src={banner.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="" />
-              <div className="absolute top-6 right-6">
-                <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                  banner.status === 'active' ? 'bg-emerald-50 text-white shadow-xl shadow-emerald-500/20' : 'bg-slate-200 text-slate-500'
-                }`}>
-                  {banner.status === 'active' ? 'Ativo' : 'Pausado'}
-                </span>
-              </div>
             </div>
             <div className="p-8">
               <h3 className="text-xl font-black text-slate-900 mb-2">{banner.title}</h3>
               <div className="flex items-center gap-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-50 pb-6 mb-6">
-                <span>Estado: Ativo para todos os usuários</span>
+                <span>Estado: Ativo no Carrossel Principal</span>
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex gap-2">
-                  <span className="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 uppercase">Target: {banner.targetId || 'Home'}</span>
+                  <span className="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 uppercase">Redirecionamento: {banner.targetId || 'Home'}</span>
                 </div>
                 <button 
                   disabled={isSubmitting}
@@ -140,24 +134,14 @@ const MarketingBanners: React.FC = () => {
                 onUploadComplete={(url) => setFormData({...formData, imageUrl: url})} 
               />
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tipo de Link (Visual apenas)</label>
-                  <select disabled={isSubmitting} value={formData.linkType} onChange={e => setFormData({...formData, linkType: e.target.value as any})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold">
-                    <option value="product">Produto Específico</option>
-                    <option value="category">Categoria Inteira</option>
-                    <option value="external">URL Externa</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">ID Alvo / URL</label>
-                  <input disabled={isSubmitting} placeholder="ID do item ou link" value={formData.targetId} onChange={e => setFormData({...formData, targetId: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold shadow-inner" />
-                </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">ID Alvo / URL Redirecionamento</label>
+                <input disabled={isSubmitting} placeholder="ID do produto ou link da categoria" value={formData.targetId} onChange={e => setFormData({...formData, targetId: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold shadow-inner" />
               </div>
 
-              <div className="p-6 bg-amber-50 rounded-[24px] border border-amber-100">
-                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Nota do Studio</p>
-                <p className="text-xs text-amber-700 leading-relaxed font-medium">As colunas de agendamento (datas) e tipo de link foram desativadas na persistência para compatibilidade com o schema atual do banco de dados.</p>
+              <div className="p-6 bg-emerald-50 rounded-[24px] border border-emerald-100">
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Conformidade de Dados</p>
+                <p className="text-xs text-emerald-700 leading-relaxed font-medium">Os campos de agendamento e status foram removidos para garantir compatibilidade com o schema atual do banco de dados.</p>
               </div>
 
               <div className="flex gap-4 pt-4">

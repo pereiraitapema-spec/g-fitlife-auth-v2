@@ -17,8 +17,10 @@ const MASTER_EMAIL = 'pereira.itapema@gmail.com';
 // Função auxiliar para validar formato UUID
 const isUUID = (str: string) => {
   if (!str || typeof str !== 'string') return false;
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(str.trim());
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; // Corrigido regex UUID
+  const strictUuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  // Usando uma versão mais flexível para aceitar os gerados pelo crypto.randomUUID
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 };
 
 // Helper para converter data do input (YYYY-MM-DD) para ISO ou null
@@ -439,23 +441,22 @@ export const storeService = {
       id: b.id,
       title: b.title,
       imageUrl: b.image_url,
-      linkType: 'product', // Fallback local apenas para UI
+      linkType: 'product', // Fallback apenas para interface
       targetId: b.target_id,
-      status: b.status,
-      startDate: '', // Removido do payload Supabase
-      endDate: ''    // Removido do payload Supabase
+      status: 'active',    // Fallback apenas para interface
+      startDate: '',       // Fallback apenas para interface
+      endDate: ''          // Fallback apenas para interface
     }));
   },
   async saveBanner(banner: Banner): Promise<void> {
     if (!supabase) return;
     
-    // PAYLOAD RESTRITO: Enviando apenas colunas confirmadas no schema REAL do Supabase.
-    // Removidas colunas 'link_type', 'start_date' e 'end_date' para evitar erro 400.
+    // PAYLOAD RESTRITO AO SCHEMA REAL DO SUPABASE
+    // Removidas colunas: status, link_type, start_date, end_date
     const dbData: any = {
       title: (banner.title || 'Sem título').trim(),
       image_url: (banner.imageUrl && banner.imageUrl.trim() !== '') ? banner.imageUrl.trim() : null,
-      target_id: (banner.targetId && banner.targetId.trim() !== '') ? banner.targetId.trim() : null,
-      status: (banner.status || 'active')
+      target_id: (banner.targetId && banner.targetId.trim() !== '') ? banner.targetId.trim() : null
     };
 
     // Só incluir o campo 'id' se ele for um UUID válido.
@@ -463,12 +464,12 @@ export const storeService = {
       dbData.id = banner.id;
     }
 
-    console.log("[GFIT-DB] Sincronizando Banner (Payload Estritamente Real):", dbData);
+    console.log("[GFIT-DB] Sincronizando Banner (Payload Estritamente Real - Schema Cache Sync):", dbData);
 
     const { error } = await supabase.from('banners').upsert(dbData);
     
     if (error) {
-      console.error("[GFIT-DB-ERROR] Erro Fatal ao persistir banner (PGRST204?):", error.message);
+      console.error("[GFIT-DB-ERROR] Erro Crítico (Schema Cache Mismatch):", error.message);
       throw new Error(`Erro na persistência do banner: ${error.message}`);
     }
     window.dispatchEvent(new Event('bannersChanged'));
