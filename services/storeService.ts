@@ -23,7 +23,7 @@ const isUUID = (str: string) => {
 
 // Helper para converter data do input (YYYY-MM-DD) para ISO ou null
 const formatToISO = (dateStr?: string) => {
-  if (!dateStr || dateStr.trim() === '') return null;
+  if (!dateStr || typeof dateStr !== 'string' || dateStr.trim() === '') return null;
   try {
     const d = new Date(dateStr);
     return isNaN(d.getTime()) ? null : d.toISOString();
@@ -450,15 +450,14 @@ export const storeService = {
     if (!supabase) return;
     
     // HIGIENIZAÇÃO RIGOROSA PARA EVITAR ERRO 400
-    // O PostgREST rejeita strings vazias em colunas do tipo UUID ou TIMESTAMPTZ.
+    // O erro "Could not find column" ocorre quando tentamos enviar campos nulos para colunas inexistentes no cache.
+    // A solução é OMITIR as chaves se elas não tiverem valor, permitindo o salvamento básico.
     const dbData: any = {
       title: (banner.title || 'Sem título').trim(),
       image_url: (banner.imageUrl && banner.imageUrl.trim() !== '') ? banner.imageUrl.trim() : null,
       link_type: (banner.linkType || 'product'),
       target_id: (banner.targetId && banner.targetId.trim() !== '') ? banner.targetId.trim() : null,
-      status: (banner.status || 'active'),
-      start_date: formatToISO(banner.startDate),
-      end_date: formatToISO(banner.endDate)
+      status: (banner.status || 'active')
     };
 
     // Só incluir o campo 'id' se ele for um UUID válido. Caso contrário, deixar o Supabase gerar.
@@ -466,12 +465,18 @@ export const storeService = {
       dbData.id = banner.id;
     }
 
-    console.log("[GFIT-DB] Sincronizando Banner com Supabase:", dbData);
+    // OMITIR as colunas de data se estiverem vazias para evitar erro de schema cache
+    const sDate = formatToISO(banner.startDate);
+    const eDate = formatToISO(banner.endDate);
+    if (sDate) dbData.start_date = sDate;
+    if (eDate) dbData.end_date = eDate;
+
+    console.log("[GFIT-DB] Sincronizando Banner (Payload Resiliente):", dbData);
 
     const { error } = await supabase.from('banners').upsert(dbData);
     
     if (error) {
-      console.error("[GFIT-DB-ERROR] Falha ao persistir banner (Código 400):", error.message, error.details);
+      console.error("[GFIT-DB-ERROR] Erro Crítico ao persistir banner:", error.message);
       throw new Error(`Erro na persistência do banner: ${error.message}`);
     }
     window.dispatchEvent(new Event('bannersChanged'));
@@ -492,12 +497,12 @@ export const storeService = {
     if (!supabase) return;
     
     const dbData: any = {
-      id: c.id,
+      id: isUUID(c.id) ? c.id : undefined,
       code: c.code,
       type: c.type,
       discount: c.value || 0, 
       active: c.status === 'active', 
-      expires_at: c.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      expires_at: formatToISO(c.expiresAt) || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     };
 
     const { error } = await supabase.from('coupons').upsert(dbData);
@@ -522,7 +527,7 @@ export const storeService = {
   async registerAffiliate(d: any): Promise<void> { 
     if (!supabase) return;
     await supabase.from('affiliates').insert({
-      id: 'aff-' + Date.now(), userId: d.email, name: d.name, email: d.email, status: 'inactive',
+      id: crypto.randomUUID(), userId: d.email, name: d.name, email: d.email, status: 'inactive',
       commissionRate: 15, totalSales: 0, balance: 0, refCode: Math.random().toString(36).substring(7).toUpperCase()
     });
   },
