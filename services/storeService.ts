@@ -321,8 +321,8 @@ export const storeService = {
       id: p.id, name: p.name, brand: p.brand, price: p.price, originalPrice: p.original_price,
       category: p.category, image: p.image, rating: p.rating, reviews: p.reviews,
       tags: p.tags, description: p.description, isAffiliate: p.is_affiliate,
-      status: p.status, departmentId: p.departmentId, categoryId: p.categoryId,
-      sellerId: p.sellerId, seo: p.seo
+      status: p.status, departmentId: p.department_id, categoryId: p.category_id,
+      sellerId: p.seller_id, seo: p.seo
     }));
   },
 
@@ -439,34 +439,31 @@ export const storeService = {
       id: b.id,
       title: b.title,
       imageUrl: b.image_url,
-      linkType: b.link_type,
+      linkType: 'product', // Fallback local
       targetId: b.target_id,
       status: b.status,
-      startDate: '', // Removed from DB schema to fix 400 error
-      endDate: ''    // Removed from DB schema to fix 400 error
+      startDate: '', // Removido do schema real
+      endDate: ''    // Removido do schema real
     }));
   },
   async saveBanner(banner: Banner): Promise<void> {
     if (!supabase) return;
     
-    // PAYLOAD RESILIENTE: Apenas colunas conhecidas que existem na tabela 'banners'
+    // PAYLOAD RESILIENTE E FILTRADO: 
+    // Removemos 'link_type', 'start_date' e 'end_date' pois o Supabase reportou que não existem no schema cache.
     const dbData: any = {
       title: (banner.title || 'Sem título').trim(),
       image_url: (banner.imageUrl && banner.imageUrl.trim() !== '') ? banner.imageUrl.trim() : null,
-      link_type: (banner.linkType || 'product'),
       target_id: (banner.targetId && banner.targetId.trim() !== '') ? banner.targetId.trim() : null,
       status: (banner.status || 'active')
     };
 
-    // Só incluir o campo 'id' se ele for um UUID válido. Caso contrário, deixar o Supabase gerar.
+    // Só incluir o campo 'id' se ele for um UUID válido.
     if (banner.id && isUUID(banner.id)) {
       dbData.id = banner.id;
     }
 
-    // AVISO: As colunas start_date e end_date foram OMITIDAS 
-    // pois não existem no schema cache do Supabase (Erro 400).
-
-    console.log("[GFIT-DB] Sincronizando Banner (Payload Resiliente - Sem datas):", dbData);
+    console.log("[GFIT-DB] Sincronizando Banner (Payload Resiliente - Apenas colunas reais):", dbData);
 
     const { error } = await supabase.from('banners').upsert(dbData);
     
