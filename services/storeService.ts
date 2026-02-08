@@ -321,8 +321,8 @@ export const storeService = {
       id: p.id, name: p.name, brand: p.brand, price: p.price, originalPrice: p.original_price,
       category: p.category, image: p.image, rating: p.rating, reviews: p.reviews,
       tags: p.tags, description: p.description, isAffiliate: p.is_affiliate,
-      status: p.status, departmentId: p.department_id, categoryId: p.category_id,
-      sellerId: p.seller_id, seo: p.seo
+      status: p.status, departmentId: p.departmentId, categoryId: p.categoryId,
+      sellerId: p.sellerId, seo: p.seo
     }));
   },
 
@@ -442,16 +442,14 @@ export const storeService = {
       linkType: b.link_type,
       targetId: b.target_id,
       status: b.status,
-      startDate: b.start_date,
-      endDate: b.end_date
+      startDate: '', // Removed from DB schema to fix 400 error
+      endDate: ''    // Removed from DB schema to fix 400 error
     }));
   },
   async saveBanner(banner: Banner): Promise<void> {
     if (!supabase) return;
     
-    // HIGIENIZAÇÃO RIGOROSA PARA EVITAR ERRO 400
-    // O erro "Could not find column" ocorre quando tentamos enviar campos nulos para colunas inexistentes no cache.
-    // A solução é OMITIR as chaves se elas não tiverem valor, permitindo o salvamento básico.
+    // PAYLOAD RESILIENTE: Apenas colunas conhecidas que existem na tabela 'banners'
     const dbData: any = {
       title: (banner.title || 'Sem título').trim(),
       image_url: (banner.imageUrl && banner.imageUrl.trim() !== '') ? banner.imageUrl.trim() : null,
@@ -465,13 +463,10 @@ export const storeService = {
       dbData.id = banner.id;
     }
 
-    // OMITIR as colunas de data se estiverem vazias para evitar erro de schema cache
-    const sDate = formatToISO(banner.startDate);
-    const eDate = formatToISO(banner.endDate);
-    if (sDate) dbData.start_date = sDate;
-    if (eDate) dbData.end_date = eDate;
+    // AVISO: As colunas start_date e end_date foram OMITIDAS 
+    // pois não existem no schema cache do Supabase (Erro 400).
 
-    console.log("[GFIT-DB] Sincronizando Banner (Payload Resiliente):", dbData);
+    console.log("[GFIT-DB] Sincronizando Banner (Payload Resiliente - Sem datas):", dbData);
 
     const { error } = await supabase.from('banners').upsert(dbData);
     

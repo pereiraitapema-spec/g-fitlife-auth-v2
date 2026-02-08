@@ -48,7 +48,7 @@ const MarketingBanners: React.FC = () => {
         id: finalId
       } as Banner;
       
-      console.log("[GFIT-BANNER-UI] Iniciando salvamento:", newBanner);
+      console.log("[GFIT-BANNER-UI] Iniciando salvamento (Sem datas para evitar erro 400):", newBanner);
       
       await storeService.saveBanner(newBanner);
       await loadData();
@@ -100,8 +100,7 @@ const MarketingBanners: React.FC = () => {
             <div className="p-8">
               <h3 className="text-xl font-black text-slate-900 mb-2">{banner.title}</h3>
               <div className="flex items-center gap-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-50 pb-6 mb-6">
-                <span>Início: {banner.startDate ? new Date(banner.startDate).toLocaleDateString() : 'Imediato'}</span>
-                <span>Fim: {banner.endDate ? new Date(banner.endDate).toLocaleDateString() : 'Indeterminado'}</span>
+                <span>Estado: Ativo para todos os usuários</span>
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex gap-2">
@@ -156,15 +155,9 @@ const MarketingBanners: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Início Exibição</label>
-                  <input disabled={isSubmitting} type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Fim Exibição</label>
-                  <input disabled={isSubmitting} type="date" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold" />
-                </div>
+              <div className="p-6 bg-amber-50 rounded-[24px] border border-amber-100">
+                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Nota do Sistema</p>
+                <p className="text-xs text-amber-700 leading-relaxed font-medium">O agendamento por data (Início/Fim) está desativado nesta versão do banco para garantir estabilidade operacional.</p>
               </div>
 
               <div className="flex gap-4 pt-4">
