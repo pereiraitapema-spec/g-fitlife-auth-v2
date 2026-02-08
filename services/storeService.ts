@@ -17,9 +17,6 @@ const MASTER_EMAIL = 'pereira.itapema@gmail.com';
 // Função auxiliar para validar formato UUID
 const isUUID = (str: string) => {
   if (!str || typeof str !== 'string') return false;
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; // Corrigido regex UUID
-  const strictUuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  // Usando uma versão mais flexível para aceitar os gerados pelo crypto.randomUUID
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 };
 
@@ -472,6 +469,12 @@ export const storeService = {
       console.error("[GFIT-DB-ERROR] Erro Crítico (Schema Cache Mismatch):", error.message);
       throw new Error(`Erro na persistência do banner: ${error.message}`);
     }
+    window.dispatchEvent(new Event('bannersChanged'));
+  },
+  async deleteBanner(id: string): Promise<void> {
+    if (!supabase) return;
+    const { error } = await supabase.from('banners').delete().eq('id', id);
+    if (error) throw error;
     window.dispatchEvent(new Event('bannersChanged'));
   },
   async getCoupons(): Promise<Coupon[]> { 
