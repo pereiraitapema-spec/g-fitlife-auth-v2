@@ -48,7 +48,7 @@ const MarketingBanners: React.FC = () => {
         id: finalId
       } as Banner;
       
-      console.log("[GFIT-BANNER-UI] Iniciando salvamento (Sem datas para evitar erro 400):", newBanner);
+      console.log("[GFIT-BANNER-UI] Iniciando salvamento (Ajuste de Schema Supabase):", newBanner);
       
       await storeService.saveBanner(newBanner);
       await loadData();
@@ -104,7 +104,7 @@ const MarketingBanners: React.FC = () => {
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex gap-2">
-                  <span className="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 uppercase">{banner.linkType}: {banner.targetId || 'Home'}</span>
+                  <span className="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 uppercase">Target: {banner.targetId || 'Home'}</span>
                 </div>
                 <button 
                   disabled={isSubmitting}
@@ -142,7 +142,7 @@ const MarketingBanners: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tipo de Link</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tipo de Link (Visual apenas)</label>
                   <select disabled={isSubmitting} value={formData.linkType} onChange={e => setFormData({...formData, linkType: e.target.value as any})} className="w-full bg-slate-50 rounded-2xl p-5 outline-none font-bold">
                     <option value="product">Produto Específico</option>
                     <option value="category">Categoria Inteira</option>
@@ -156,8 +156,8 @@ const MarketingBanners: React.FC = () => {
               </div>
 
               <div className="p-6 bg-amber-50 rounded-[24px] border border-amber-100">
-                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Nota do Sistema</p>
-                <p className="text-xs text-amber-700 leading-relaxed font-medium">O agendamento por data (Início/Fim) está desativado nesta versão do banco para garantir estabilidade operacional.</p>
+                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Nota do Studio</p>
+                <p className="text-xs text-amber-700 leading-relaxed font-medium">As colunas de agendamento (datas) e tipo de link foram desativadas na persistência para compatibilidade com o schema atual do banco de dados.</p>
               </div>
 
               <div className="flex gap-4 pt-4">

@@ -321,7 +321,7 @@ export const storeService = {
       id: p.id, name: p.name, brand: p.brand, price: p.price, originalPrice: p.original_price,
       category: p.category, image: p.image, rating: p.rating, reviews: p.reviews,
       tags: p.tags, description: p.description, isAffiliate: p.is_affiliate,
-      status: p.status, departmentId: p.department_id, categoryId: p.category_id,
+      status: p.status, department_id: p.department_id, categoryId: p.category_id,
       sellerId: p.seller_id, seo: p.seo
     }));
   },
@@ -439,18 +439,18 @@ export const storeService = {
       id: b.id,
       title: b.title,
       imageUrl: b.image_url,
-      linkType: 'product', // Fallback local
+      linkType: 'product', // Fallback local apenas para UI
       targetId: b.target_id,
       status: b.status,
-      startDate: '', // Removido do schema real
-      endDate: ''    // Removido do schema real
+      startDate: '', // Removido do payload Supabase
+      endDate: ''    // Removido do payload Supabase
     }));
   },
   async saveBanner(banner: Banner): Promise<void> {
     if (!supabase) return;
     
-    // PAYLOAD RESILIENTE E FILTRADO: 
-    // Removemos 'link_type', 'start_date' e 'end_date' pois o Supabase reportou que não existem no schema cache.
+    // PAYLOAD RESTRITO: Enviando apenas colunas confirmadas no schema REAL do Supabase.
+    // Removidas colunas 'link_type', 'start_date' e 'end_date' para evitar erro 400.
     const dbData: any = {
       title: (banner.title || 'Sem título').trim(),
       image_url: (banner.imageUrl && banner.imageUrl.trim() !== '') ? banner.imageUrl.trim() : null,
@@ -463,12 +463,12 @@ export const storeService = {
       dbData.id = banner.id;
     }
 
-    console.log("[GFIT-DB] Sincronizando Banner (Payload Resiliente - Apenas colunas reais):", dbData);
+    console.log("[GFIT-DB] Sincronizando Banner (Payload Estritamente Real):", dbData);
 
     const { error } = await supabase.from('banners').upsert(dbData);
     
     if (error) {
-      console.error("[GFIT-DB-ERROR] Erro Crítico ao persistir banner:", error.message);
+      console.error("[GFIT-DB-ERROR] Erro Fatal ao persistir banner (PGRST204?):", error.message);
       throw new Error(`Erro na persistência do banner: ${error.message}`);
     }
     window.dispatchEvent(new Event('bannersChanged'));
